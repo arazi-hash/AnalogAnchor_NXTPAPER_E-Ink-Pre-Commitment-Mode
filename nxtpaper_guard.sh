@@ -96,6 +96,9 @@ guard_publish() {
     return 0
 }
 
+ANCHOR_ICON_LARGE='data:base64,iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAMAAABg3Am1AAAAYFBMVEXp9Pe14Oyktb9Txe9Sos9vjqNgd4gvgrknbqFDXGw4SVgUTX4TMUsKITYSGB0SFhsRFhsRFhoQFx0KFyMRFRsRFRoRFRkQFRsQFRoQFRkLFR0TFBYQFBkPFBkMExkHDxec783+AAAEPklEQVR42mVWi7arKAzlISAC1uKFix2r//+XsxO07axhnUMR2SHZeSm2UretNUyYS8HPTsvSaKIlfvBPi4LNKvb+QKexvNYFm+Xz1DqgNsglQB+FBPU3BaJwWbneVP7bSscJ3ttpr9x3Aft8XgK2+/09rhtwdK+XCji6LDkvz/YF7D+AfSu/MqDLkmcay1K+gI9c8V8RpM2c59e5nueMS8rPFThdtl2w8P3ehKl0flLKTEDkBaTv/d0l8gfA+iz5yOukhFLDtGL9p/0avhPgx6CNrI1pVTK4YFRKce12VOaVXLyLy56L9pzXwYxSusEpNZohvRfSHLbV1lkXpFxld8MzZT78MGhjNCY7aDcd+dbpEkl++CjVFgCc004Jrcw4jC4cc3cHux4ksUoMIAVLzufkRugjoZgbxzGcOZfuHVIK2pBK+03D8k4+hOCGwWiCYe3jsUDfT2jt39BAMM1nEEpKKfrAchD+nCkWe+TXy2gAKomZj2D6UMZiGOtsgNkUjpQM0Hu//dAo8uZ3hN7OWQtHe89WQCU6+YQXWC/xdTqIW15wVgyjkxA+hhhTOpikSmdxR0MC7YVTjEiq7fl8v9YUnTDGxXXNjUO2didw2okehYWN2NoTiUAA5e2YEEvneTwI0k34Bh+hCiUZAPOawqDEQIA4TfHYHhT19U6g935H00LhDECKoxRG6HhaReN8P8r/UhQ7Sz4zIHSBFgoRPq7Kz7MX6p+6XArhnttx5fFONq4zWYAL4AJcYXxKk5Lm9fjmNwMQJeVxRKlDAq10gRkMrgAgzlENqbLh7QMAqwjsOBgZ4AYnpdFaW6npBi/tGN9Lu2sLVw3imAFKj3QBfjWSQuopWWk8ASC0VjooOPPxmAHwykjnJGYaBpnqpTETAE/yRKkcGtANJZNVmqx0WktEHQ1r5eDgwtgBT4bAcajIlVg9onMeukiI5GEnMgVPLu0LR9OlUuOqgOSJo5uUVh7nBh+ctsAbZGBcObQL1w7RiwJoQkVKCH8cg1yFhdbeDsG7dHJdLj2exE9Nml/RDWYaNOlFADcZyH/lheObIUWU9mkLCI6gvXdWwdWTtd55q1EGlso6dKJE7QlNiGVJg52GcfJKmAljBG8OSdGJr4Uagtiu5gIYEUX0OOuNiZMfAz2g+HGX4yqAG678IUBbcgrIyjDCEo8UTWsM6e9fzncmBhMBGvkOZiF/3udBKReccTie83G8+TUnBHy3lU9TJHYb7qBulSE5ri/OJ4Rd5S7MnfKHVtaTC9AfQP6+6Hj3ENWH1n/wLD42MxONquITmU2iO+G1d4eLe2ooVwfrhYSLNMdlY1t5vf2MW6XWetOD7ZXcyhOJedatfBp8r0u3gHZtXXFzF7xyH+h7naX66Yt3eegNt3w/IPoHyBfQPl8szN9Wyk+bYtsLEwAbSueTkqL2NsAthz9ivuYyBbT1L9pmrZ0wPl2AAAAAAElFTkSuQmCC'
+ANCHOR_ICON_SMALL='data:base64,iVBORw0KGgoAAAANSUhEUgAAACQAAAAkCAYAAADhAJiYAAABS0lEQVR42mNgGAWjYJgBRkoN+P///3+4YYyMFJvHRC3HYOPTxUH///8P+w8BO3A5Egq20SXKSAkFcqKQabAlanIc9IaE0Eynqev/kwd20CSE/v//H0+mP97SMoRW/P///yeOkPiGhX+ebonv////kTgcFjlgOeL///8v0BzzYSAdgzWEoHJL0cXo4aCDSHZeR3PQ/////5/5//9/CtUdBTMcTSyJiOyeAlU7hRRHEZvtjZF8H8bAwNBHhB5xKC1I68JwHzGlIVTvUzThJFpUHY4kVMJSUO5VelSu7xgYGP5gEb+MRew5lP5LjSh7BA3uz2TWZbdokdO2oVlyl4Aj/qHzaVHukBpCl8gJGVLS0FcofQFHu2gnAwPDFgYGhtlQvi6tS+Z/BEJkPr4igFaOSvr//38ggdJ6PpL6rIGoZGEh82i0mzsKRsFQAAChzOuhleDHFAAAAABJRU5ErkJggg=='
+
 guard_notify() {
     # Update on phase changes / minute changes only, not on every poll or retry.
     notification_language=$(cat "$LANGUAGE_FILE" 2>/dev/null)
@@ -133,7 +136,7 @@ guard_notify() {
           *) cmd notification cancel guard_commit >/dev/null 2>&1; return 0 ;;
         esac
     fi
-    cmd notification post -S bigtext -t "$notification_title" guard_commit "$notification_text" >/dev/null 2>&1
+    cmd notification post -S bigtext -t "$notification_title" -I "$ANCHOR_ICON_LARGE" -i "$ANCHOR_ICON_SMALL" guard_commit "$notification_text" >/dev/null 2>&1
 }
 
 guard_fail() {

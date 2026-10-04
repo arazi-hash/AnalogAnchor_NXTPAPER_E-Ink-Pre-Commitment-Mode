@@ -475,6 +475,26 @@ cat "$GUARD_TEST_DIR/notifications"
         self.assertIn("E-Ink Pre-commitment Mode", lines[2])
         self.assertIn("الوقت المتبقي", lines[2])
 
+    def test_notification_passes_analog_anchor_large_and_small_icons(self):
+        import base64
+        lines = self.run_controller("""
+cmd() { printf '%s\n' "$*" >> "$GUARD_TEST_DIR/notifications"; }
+commit
+guard_notify
+cat "$GUARD_TEST_DIR/notifications"
+""")
+        self.assertEqual(len(lines), 1)
+        notification_cmd = lines[0]
+        self.assertIn("notification post", notification_cmd)
+        self.assertIn("-I data:base64,", notification_cmd)
+        self.assertIn("-i data:base64,", notification_cmd)
+        large_part = notification_cmd.split("-I data:base64,")[1].split()[0]
+        large_bytes = base64.b64decode(large_part)
+        self.assertTrue(large_bytes.startswith(b"\x89PNG\r\n\x1a\n"))
+        small_part = notification_cmd.split("-i data:base64,")[1].split()[0]
+        small_bytes = base64.b64decode(small_part)
+        self.assertTrue(small_bytes.startswith(b"\x89PNG\r\n\x1a\n"))
+
     def test_monitor_cleanup_checks_pid_start_time_boot_and_command(self):
         stat = "42 (getevent) S " + " ".join(["0"] * 18) + " 999 0\n"
         base_files = {"proc/42/stat": stat,
