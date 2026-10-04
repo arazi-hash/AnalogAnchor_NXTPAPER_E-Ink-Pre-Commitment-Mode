@@ -1,0 +1,11 @@
+# Launcher artwork
+
+`launcher-source.png` is the canonical companion artwork based on the user's Analog Anchor raster logo. The blue anchor/A remains recognizable, while a charcoal background and a small folded paper cue distinguish the NXTPAPER companion. There is no small text in the icon.
+
+Created with the built-in ImageGen editing tool on 2026-10-03. The original personal Desktop attachment is not required to build this repository.
+
+The Android build uses `app/src/main/res/drawable-nodpi/launcher_art.png`, a 512px Lanczos resize of this source. `ic_launcher_foreground.xml` adds 10% padding per edge for Android's adaptive icon masks. Both the standard and round launcher icons use this artwork.
+
+Generation prompt:
+
+> Use case: precise-object-edit. Asset type: Android adaptive launcher icon for an Analog Anchor companion app named E-INK mode Pre-commitment for TCL NXTPAPER. Edit target: the provided Analog Anchor logo image. Primary request: make a tasteful slight alteration, immediately recognizable as the same original brand. Preserve the complete blue metallic anchor and A monogram shape, exact recognizable silhouette, central A, top circuit detail, arrow/fluke positions, realistic blue beveled finish and fine details. Differentiate the companion by changing the pale backdrop to a clean deep charcoal graphite field (#101418), and adding ONE simple small ivory paper-page outline with a folded upper-right corner immediately behind the lower right side of the original monogram, subtle but legible at small size. No words or letters added. Existing A monogram is the only letter. Composition: square high quality app icon, flat solid full bleed graphite background, no outer frame or border, no baked rounded corners. Keep the whole combined monogram and small paper cue centered and confined inside the middle 60 percent of the canvas, with generous even space on all four sides so circle and squircle Android icon masks never clip any part. Preserve the original anchor identity, not a new logo. The paper cue should occupy about 20 percent of symbol height and not cover the A or anchor details. Avoid: text labels, TCL lettering, slogans, extra circles, badges, multiple sheets, busy decorations, mockup phone, watermark. Output one finished square launcher icon.

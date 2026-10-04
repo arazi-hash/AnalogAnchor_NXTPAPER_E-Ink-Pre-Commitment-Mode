@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/guardRoot" android:layout_width="match_parent" android:layout_height="match_parent"
+    android:background="@color/gray_dark" android:fillViewport="true">
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="20dp">
+        <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp"
+            android:gravity="center" android:text="@string/title_nxtpaper_guard" android:textDirection="ltr"
+            android:textColor="@color/accent_blue" android:textSize="24sp" android:textStyle="bold" />
+        <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="6dp"
+            android:gravity="center" android:text="@string/desc_nxtpaper_guard" android:textColor="@color/gray_text" android:textSize="14sp" />
+        <com.google.android.material.card.MaterialCardView android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:layout_marginTop="18dp" app:cardBackgroundColor="@color/gray_card" app:cardCornerRadius="20dp"
+            app:strokeColor="@color/accent_gold" app:strokeWidth="1dp">
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="14dp">
+                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical" android:orientation="horizontal">
+                    <TextView android:id="@+id/tvCommitmentTitle" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
+                        android:text="@string/guard_card_title" android:textColor="@color/accent_gold" android:textSize="15sp" android:textStyle="bold" />
+                    <Button android:id="@+id/btnGuardHelp" style="@style/Widget.Material3.Button.TextButton" android:layout_width="48dp" android:layout_height="48dp" android:minWidth="48dp" android:minHeight="48dp" android:padding="0dp" android:contentDescription="@string/guard_help_accessibility" android:text="@string/help_symbol" android:textColor="@color/accent_blue" android:textSize="20sp" />
+                </LinearLayout>
+                <TextView android:id="@+id/tvServiceStatus" android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:gravity="center" android:text="@string/guard_checking" android:textColor="@color/white" android:textSize="18sp" android:textStyle="bold" />
+                <TextView android:id="@+id/tvGuardError" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp"
+                    android:accessibilityLiveRegion="polite" android:textColor="@color/accent_red" android:textSize="14sp" android:visibility="gone" />
+                <com.google.android.material.button.MaterialButton android:id="@+id/btnToggleService" style="@style/Widget.Material3.Button" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="48dp" android:textAllCaps="false" android:textColor="@color/accent_blue" android:text="@string/btn_start_service" android:layout_marginTop="10dp" android:backgroundTint="@color/accent_blue" app:cornerRadius="16dp" />
+                <com.google.android.material.button.MaterialButton android:id="@+id/btnCancelResume" style="@style/Widget.Material3.Button.TextButton" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="48dp" android:textAllCaps="false" android:textColor="@color/accent_blue" android:text="@string/btn_cancel_resume" android:visibility="gone" app:cornerRadius="16dp" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+        <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="16dp"
+            android:gravity="center" android:text="@string/duration_heading" android:textColor="@color/white" android:textSize="16sp" android:textStyle="bold" />
+        <TextView android:id="@+id/tvDurationNote" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="4dp"
+            android:gravity="center" android:text="@string/duration_next_session" android:textColor="@color/gray_text" android:textSize="12sp" />
+        <com.google.android.material.button.MaterialButton android:id="@+id/btnDurationDefault" style="@style/Widget.Material3.Button.OutlinedButton" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="48dp" android:textAllCaps="false" android:textColor="@color/accent_blue"  android:layout_marginTop="8dp" app:strokeColor="@color/accent_gold" app:cornerRadius="16dp" />
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
+            <com.google.android.material.button.MaterialButton android:id="@+id/btnDurationTwo" style="@style/Widget.Material3.Button.OutlinedButton" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginHorizontal="4dp" android:minHeight="48dp" android:textAllCaps="false" android:textColor="@color/accent_blue" app:cornerRadius="16dp" app:strokeColor="@color/gray_border" />
+            <com.google.android.material.button.MaterialButton android:id="@+id/btnDurationFour" style="@style/Widget.Material3.Button.OutlinedButton" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginHorizontal="4dp" android:minHeight="48dp" android:textAllCaps="false" android:textColor="@color/accent_blue" app:cornerRadius="16dp" app:strokeColor="@color/gray_border" />
+        </LinearLayout>
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
+            <com.google.android.material.button.MaterialButton android:id="@+id/btnDurationSix" style="@style/Widget.Material3.Button.OutlinedButton" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginHorizontal="4dp" android:minHeight="48dp" android:textAllCaps="false" android:textColor="@color/accent_blue" app:cornerRadius="16dp" app:strokeColor="@color/gray_border" />
+            <com.google.android.material.button.MaterialButton android:id="@+id/btnDurationTwelve" style="@style/Widget.Material3.Button.OutlinedButton" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginHorizontal="4dp" android:minHeight="48dp" android:textAllCaps="false" android:textColor="@color/accent_blue" app:cornerRadius="16dp" app:strokeColor="@color/gray_border" />
+        </LinearLayout>
+        <com.google.android.material.card.MaterialCardView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp"
+            app:cardBackgroundColor="@color/gray_card" app:cardCornerRadius="18dp" app:strokeColor="@color/gray_border" app:strokeWidth="1dp">
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="12dp">
+                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical" android:orientation="horizontal">
+                    <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical">
+                        <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/shizuku_card_title" android:textColor="@color/gray_text" android:textSize="12sp" />
+                        <TextView android:id="@+id/tvShizukuStatus" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/shizuku_status_unknown" android:textColor="@color/white" android:textSize="14sp" />
+                    </LinearLayout>
+                    <Button android:id="@+id/btnShizukuHelp" style="@style/Widget.Material3.Button.TextButton" android:layout_width="48dp" android:layout_height="48dp" android:minWidth="48dp" android:minHeight="48dp" android:padding="0dp" android:contentDescription="@string/shizuku_help_accessibility" android:text="@string/help_symbol" android:textColor="@color/accent_blue" android:textSize="20sp" />
+                </LinearLayout>
+                <com.google.android.material.button.MaterialButton android:id="@+id/btnGrantShizuku" style="@style/Widget.Material3.Button" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="48dp" android:textAllCaps="false" android:textColor="@color/gray_dark" android:text="@string/btn_grant_shizuku" android:backgroundTint="@color/accent_blue" android:visibility="gone" app:cornerRadius="16dp" />
+                <com.google.android.material.button.MaterialButton android:id="@+id/btnOpenShizuku" style="@style/Widget.Material3.Button" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="48dp" android:textAllCaps="false" android:textColor="@color/gray_dark" android:text="@string/btn_open_shizuku" android:backgroundTint="@color/accent_blue" android:visibility="gone" app:cornerRadius="16dp" />
+                <View android:layout_width="match_parent" android:layout_height="1dp" android:layout_marginVertical="6dp" android:background="@color/gray_border" />
+                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical" android:orientation="horizontal">
+                    <TextView android:id="@+id/tvHardwareState" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="@string/state_unknown" android:textColor="@color/gray_text" android:textSize="13sp" />
+                    <Button android:id="@+id/btnHardwareHelp" style="@style/Widget.Material3.Button.TextButton" android:layout_width="48dp" android:layout_height="48dp" android:minWidth="48dp" android:minHeight="48dp" android:padding="0dp" android:contentDescription="@string/hardware_help_accessibility" android:text="@string/help_symbol" android:textColor="@color/accent_blue" android:textSize="20sp" />
+                </LinearLayout>
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+        <com.google.android.material.button.MaterialButton android:id="@+id/btnToggleTests" style="@style/Widget.Material3.Button.TextButton" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="48dp" android:textAllCaps="false" android:textColor="@color/accent_blue" android:text="@string/show_mode_tests" android:layout_marginTop="4dp" android:textSize="12sp" app:cornerRadius="16dp" />
+        <LinearLayout android:id="@+id/layoutTests" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:visibility="gone">
+            <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/mode_tests_note" android:textColor="@color/gray_text" android:textSize="13sp" />
+            <com.google.android.material.button.MaterialButton android:id="@+id/btnTestInk" style="@style/Widget.Material3.Button" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="48dp" android:textAllCaps="false" android:textColor="@color/accent_blue" android:text="@string/btn_test_ink" android:backgroundTint="@color/gray_border" app:cornerRadius="16dp" />
+            <com.google.android.material.button.MaterialButton android:id="@+id/btnTestNormal" style="@style/Widget.Material3.Button" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="48dp" android:textAllCaps="false" android:textColor="@color/accent_blue" android:text="@string/btn_test_normal" android:backgroundTint="@color/gray_border" app:cornerRadius="16dp" />
+        </LinearLayout>
+        <Space android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" />
+        <com.google.android.material.button.MaterialButton android:id="@+id/btnLanguage" style="@style/Widget.Material3.Button.OutlinedButton"
+            android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_gravity="center_horizontal"
+            android:layout_marginTop="12dp" android:minWidth="160dp" android:minHeight="48dp" android:textAllCaps="false"
+            android:textColor="@color/accent_blue" app:cornerRadius="24dp" app:strokeColor="@color/accent_blue" />
+        <TextView android:id="@+id/tvVersion" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="4dp"
+            android:gravity="center" android:textColor="@color/gray_text" android:textSize="11sp" />
+    </LinearLayout>
+</ScrollView>
+
+

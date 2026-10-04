@@ -1,0 +1,45 @@
+# Private device evidence and local notes
+logs/
+observations/
+captures/
+raw/
+diagnostic-output/
+*.log
+
+# Python environments and generated caches
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Machine-specific configuration
+local/
+.env
+.env.*
+*.local.json
+local_config.json
+local.settings.json
+adb_path.txt
+
+# Android generated files and PC-specific SDK paths
+.gradle/
+.kotlin/
+**/build/
+**/local.properties
+*.apk
+*.aab
+*.jks
+*.keystore
+device_screen.png
+current_phone_screen*.png
+dist/
+
+# Editor and OS files
+.vscode/
+.idea/
+Thumbs.db
+Desktop.ini
+.DS_Store

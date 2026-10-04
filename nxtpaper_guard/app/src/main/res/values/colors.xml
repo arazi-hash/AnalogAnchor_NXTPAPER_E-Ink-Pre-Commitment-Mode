@@ -1,0 +1,13 @@
+<resources>
+    <color name="black">#FF000000</color>
+    <color name="white">#FFFFFFFF</color>
+    <color name="gray_dark">#FF0B1215</color>
+    <color name="gray_card">#FF142126</color>
+    <color name="gray_border">#FF304A52</color>
+    <color name="gray_text">#FFBDC9CE</color>
+    <color name="accent_green">#FF34C759</color>
+    <color name="accent_red">#FFFF3B30</color>
+    <color name="accent_blue">#FF88EAF2</color>
+    <color name="accent_gold">#FFE9C97F</color>
+    <color name="duration_selected">#FF303029</color>
+</resources>

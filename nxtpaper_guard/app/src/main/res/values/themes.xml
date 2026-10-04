@@ -1,0 +1,8 @@
+<resources>
+    <style name="Theme.NxtpaperGuard" parent="Theme.Material3.Dark.NoActionBar">
+        <item name="android:statusBarColor">@color/gray_dark</item>
+        <item name="android:navigationBarColor">@color/gray_dark</item>
+        <item name="android:windowBackground">@color/gray_dark</item>
+        <item name="android:windowLightStatusBar">false</item>
+    </style>
+</resources>
