@@ -4,8 +4,6 @@ import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.res.ColorStateList
-import android.database.ContentObserver
-import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
@@ -102,12 +100,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private val settingsObserver = object : ContentObserver(mainHandler) {
-        override fun onChange(selfChange: Boolean, uri: Uri?) {
-            refreshConnectionAndHardware()
-        }
-    }
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         WindowCompat.setDecorFitsSystemWindows(window, false)
@@ -184,9 +176,6 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         visible = true
-        for (key in listOf("nxtpaper_ink_style_state", "nxtpaper_book_style_state")) {
-            contentResolver.registerContentObserver(Settings.Secure.getUriFor(key), false, settingsObserver)
-        }
         mainHandler.removeCallbacks(poll)
         poll.run()
     }
@@ -194,7 +183,6 @@ class MainActivity : AppCompatActivity() {
     override fun onPause() {
         visible = false
         mainHandler.removeCallbacks(poll)
-        contentResolver.unregisterContentObserver(settingsObserver)
         super.onPause()
     }
 
@@ -284,7 +272,7 @@ class MainActivity : AppCompatActivity() {
         tvShizukuStatus.setTextColor(ContextCompat.getColor(this, if (authorized) R.color.accent_green else R.color.accent_red))
         btnGrantShizuku.visibility = if (connected && !authorized) View.VISIBLE else View.GONE
         btnOpenShizuku.visibility = if (authorized) View.GONE else View.VISIBLE
-        val inkState = Settings.Secure.getInt(contentResolver, "nxtpaper_ink_style_state", -1)
+        val inkState = if (authorized) lastResult.nativeInkState else null
         val physical = if (authorized) lastResult.physical else "UNKNOWN"
         val physicalText = getString(when (physical) {
             "ON" -> R.string.switch_ink

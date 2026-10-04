@@ -42,6 +42,14 @@ data class GuardStatus(
     }
 }
 
+/** Missing profile/OEM keys are unknown, never proof of Normal mode. */
+fun parseNativeInkState(output: String?): Int? = when (output?.trim()) {
+    "0" -> 0
+    "1" -> 1
+    "2" -> 2
+    else -> null
+}
+
 fun formatCountdown(seconds: Long, locale: Locale): String {
     val remaining = seconds.coerceAtLeast(0)
     val formatter = NumberFormat.getIntegerInstance(locale).apply {

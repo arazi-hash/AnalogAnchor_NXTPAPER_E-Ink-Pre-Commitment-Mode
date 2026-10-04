@@ -27,7 +27,7 @@
     <string name="hardware_state">Switch: %1$s • Screen: %2$s</string>
     <string name="hardware_help_accessibility">Explain how the physical switch is detected</string>
     <string name="hardware_help_title">The physical switch</string>
-    <string name="hardware_help_message">Move the side switch to Max Ink to start the selected commitment. If it is already in Ink, move it to Normal, then Max Ink.\n\nDuring a commitment, the screen returns to Max Ink even if the switch is moved to Normal early. Native screen transitions take a few seconds.</string>
+    <string name="hardware_help_message">Move the side switch to Max Ink to start the selected commitment. If it is already in Ink, move it to Normal, then Max Ink.\n\nDuring a commitment, the screen returns to Max Ink if you move the switch to Normal early. This can take around 20 seconds.\n\nIf the switch does not respond, remove any magnetic case or holder and try again.</string>
     <string name="state_unknown">Not detected yet</string>
     <string name="switch_ink">Ink</string>
     <string name="switch_normal">Normal</string>

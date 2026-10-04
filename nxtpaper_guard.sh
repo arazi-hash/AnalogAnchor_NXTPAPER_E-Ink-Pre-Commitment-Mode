@@ -359,29 +359,71 @@ guard_duration_request() {
     rm -f "$DURATION_REQUEST"
 }
 
+guard_duration_owner_live() {
+    # An unreadable identity for a still-existing process is not proof of death.
+    [ "$3" = "$DURATION_BOOT" ] || return 1
+    if guard_process_info "$1"; then
+        [ "$process_started" = "$2" ] && [ "$process_boot" = "$3" ]
+    else
+        [ -e "$PROC_ROOT/$1" ]
+    fi
+}
+
 guard_set_duration() (
     guard_duration_load || { guard_duration_error CLOCK_UNAVAILABLE; return 0; }
     guard_duration_valid "${1:-}" || { guard_duration_error DURATION_INVALID; return 0; }
     duration_value=$1
-    # One caller owns the mailbox until acknowledgment. A stale lock can only
-    # be removed after comparing the recorded owner's process/boot identity.
-    if ! mkdir "$DURATION_COMMAND_LOCK" 2>/dev/null; then
-        if [ -r "$DURATION_COMMAND_LOCK/owner" ]; then
-            IFS=: read -r owner_pid owner_started owner_boot < "$DURATION_COMMAND_LOCK/owner"
-            if ! guard_process_info "$owner_pid" || [ "$process_started" != "$owner_started" ] ||
-                [ "$process_boot" != "$owner_boot" ]; then
-                rm -f "$DURATION_COMMAND_LOCK/owner"
-                rmdir "$DURATION_COMMAND_LOCK" 2>/dev/null
-            fi
-        fi
-        mkdir "$DURATION_COMMAND_LOCK" 2>/dev/null || { guard_duration_error DURATION_BUSY; return 0; }
-    fi
-    trap 'rm -f "$DURATION_COMMAND_LOCK/owner"; rmdir "$DURATION_COMMAND_LOCK" 2>/dev/null' EXIT
-    trap 'exit 1' TERM INT HUP
     guard_process_info "$$" || { guard_duration_error PROCESS_IDENTITY_UNAVAILABLE; return 0; }
-    printf '%s:%s:%s\n' "$$" "$process_started" "$process_boot" > "$DURATION_COMMAND_LOCK/owner" || {
+    case "$process_started" in ''|*[!0-9]*) guard_duration_error PROCESS_IDENTITY_UNAVAILABLE; return 0 ;; esac
+    case "$process_boot" in ''|*[!a-zA-Z0-9-]*) guard_duration_error PROCESS_IDENTITY_UNAVAILABLE; return 0 ;; esac
+    # The container may outlive a killed caller. Identity is part of each
+    # atomic reservation name, so there is no mkdir-to-owner-file crash gap.
+    duration_claim=$DURATION_COMMAND_LOCK/claim.$$.$process_started.$process_boot
+    mkdir "$DURATION_COMMAND_LOCK" 2>/dev/null || [ -d "$DURATION_COMMAND_LOCK" ] || {
         guard_duration_error DURATION_WRITE_FAILED; return 0;
     }
+    mkdir "$duration_claim" 2>/dev/null || { guard_duration_error DURATION_BUSY; return 0; }
+    trap 'rmdir "$duration_claim" 2>/dev/null; rmdir "$DURATION_COMMAND_LOCK" 2>/dev/null || :' EXIT
+    trap 'exit 1' TERM INT HUP
+    # Older controllers wrote a shared owner file. Check it conservatively,
+    # but never delete or overwrite it: a concurrent legacy owner may replace
+    # that record. A confirmed stale record does not block new reservations.
+    if [ -e "$DURATION_COMMAND_LOCK/owner" ]; then
+        IFS=: read -r owner_pid owner_started owner_boot < "$DURATION_COMMAND_LOCK/owner" || {
+            guard_duration_error DURATION_BUSY; return 0;
+        }
+        case "$owner_pid" in ''|*[!0-9]*) guard_duration_error DURATION_BUSY; return 0 ;; esac
+        case "$owner_started" in ''|*[!0-9]*) guard_duration_error DURATION_BUSY; return 0 ;; esac
+        case "$owner_boot" in ''|*[!a-zA-Z0-9-]*) guard_duration_error DURATION_BUSY; return 0 ;; esac
+        duration_legacy_owner=$owner_pid:$owner_started:$owner_boot
+        if guard_duration_owner_live "$owner_pid" "$owner_started" "$owner_boot"; then
+            guard_duration_error DURATION_BUSY; return 0
+        fi
+        IFS=: read -r owner_pid owner_started owner_boot < "$DURATION_COMMAND_LOCK/owner" || {
+            guard_duration_error DURATION_BUSY; return 0;
+        }
+        [ "$duration_legacy_owner" = "$owner_pid:$owner_started:$owner_boot" ] || {
+            guard_duration_error DURATION_BUSY; return 0;
+        }
+    fi
+    for duration_other in "$DURATION_COMMAND_LOCK"/claim.*; do
+        [ -e "$duration_other" ] || continue
+        [ "$duration_other" != "$duration_claim" ] || continue
+        claim_identity=${duration_other##*/claim.}
+        claim_pid=${claim_identity%%.*}
+        claim_tail=${claim_identity#*.}
+        claim_started=${claim_tail%%.*}
+        claim_boot=${claim_tail#*.}
+        case "$claim_pid" in ''|*[!0-9]*) guard_duration_error DURATION_BUSY; return 0 ;; esac
+        case "$claim_started" in ''|*[!0-9]*) guard_duration_error DURATION_BUSY; return 0 ;; esac
+        case "$claim_boot" in ''|*[!a-zA-Z0-9-]*) guard_duration_error DURATION_BUSY; return 0 ;; esac
+        if [ "$claim_identity" != "$claim_pid.$claim_started.$claim_boot" ] ||
+            guard_duration_owner_live "$claim_pid" "$claim_started" "$claim_boot"; then
+            guard_duration_error DURATION_BUSY; return 0
+        fi
+        # Only this dead identity's unique reservation is eligible for removal.
+        rmdir "$duration_other" 2>/dev/null || { guard_duration_error DURATION_BUSY; return 0; }
+    done
     if ! guard_live_pid; then
         previous_duration=$NEXT_DURATION
         NEXT_DURATION=$duration_value

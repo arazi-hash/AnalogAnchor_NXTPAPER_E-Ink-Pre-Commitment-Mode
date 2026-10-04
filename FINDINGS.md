@@ -1,67 +1,67 @@
 # Verified NXTPAPER controls
 
-Investigation dates: 3–4 October 2026. These findings apply to the tested personal stock handset; the controller refuses other firmware profiles. Historical PC trials and APK versions are identified below so they are not mistaken for validation of the current update.
+Investigation dates: 3–4 October 2026. These findings apply to the tested TCL NXTPAPER 70 Pro stock handset. Historical PC trials and older APKs are identified separately.
 
-## Current standalone update: 1.0.3 / code 4
+## Final standalone APK: 1.0.3 / code 4
 
-The app name is **E-Ink Pre-commitment Mode** in the Arabic and English UI. The update retains Shizuku and the native TCL Max Ink controls, adds a compact bilingual screen and bottom language toggle, and exposes one-session commitments of **2, 4, 6, or 12 hours** alongside the default **five minutes**. A selected preset is consumed when the next session enters `STARTING`; the active duration is frozen and the next-session duration returns to 300 seconds. Stop, an error, and reboot also reset the optional selection.
+The Arabic and English UI uses the exact name **E-Ink Pre-commitment Mode**. Five minutes is the default; 2, 4, 6, and 12 hours are one-session presets. Entry consumes the selection, freezes the active duration, and returns the next session to 300 seconds. Native Max Ink and settled theme/animation flags must be confirmed before the countdown begins. Early-exit repairs preserve the original deadline. At expiry, physical Ink continues reading until the user moves to Normal. Active-session Stop cancels and restores Normal; idle Stop only ends monitoring. Recovery takes native transition time, with measured physical recoveries of **15–19 seconds**.
 
-The first fresh physical Ink event is intended to start the session without the old Ink → Normal → Ink calibration. Native Max Ink and cleared theme/animation flags must be confirmed before the countdown begins. Early exits are repaired without changing the original deadline. After expiry, a physical switch left in Ink keeps reading open until the user moves it to Normal. During an active controlled session, emergency Stop overrides the timer and verifies normal restoration. Stop while idle ends monitoring and leaves the native screen mode unchanged. Native transitions can take several seconds; immediate recovery is not guaranteed.
+### Verified fixes
 
-### Device-verified 1.0.2 startup defect
+- The first fresh physical ON is accepted without a preceding OFF or three-move calibration. The old 1.0.2 controller ignored sequence-1 ON events across five observed starts.
+- Decompiled TCL `PhoneWindowManager` and SystemUI confirm `TSWT_state=-1` is a legitimate boot sentinel. It is now accepted as unknown rather than failing after three reads. Unknown native state causes no mode commands or physical-position inference; active entry/recovery/restoration retain 45-second bounds.
+- Island profile 10's local resolver lacks native mode fields. UI snapshots now come from the same Shizuku context as the controller; failed reads display Unknown while retaining the controller phase.
+- Duration locking now uses atomic per-caller PID/start-time/boot claim directories, with cleanup limited to owned claims. Orphan/empty locks cannot block duration requests indefinitely. Earlier setter processes were confirmed absent before deployment. Stop reloads the five-minute default when the daemon exits.
 
-The installed 1.0.2 controller was verified to match the canonical script. Its local `guard.log` recorded five startup attempts where the first physical `ON` event was sequence 1 and the following `OFF` event was sequence 2, but no `STARTING` session was entered. Only a later `ON` at sequence 3 began entry: the log recorded `STARTING` at device uptime 4672 seconds and confirmed `COMMITTED` at 4678 seconds. The live guard was healthy in `IDLE`/physical `OFF`, with controller and monitor process identities matching.
+### Final build, tests, and artifact
 
-This establishes an ignored-first-Ink startup defect rather than a pairing failure. The old arming logic required an earlier physical OFF event before accepting ON. A separate stalled-recovery path was reproduced statically; the user's full repeated physical-switch failure sequence still needs validation on the updated handset build.
+- **153 Python tests passed**, no failures or skips: 80 shell-controller regressions plus 73 original PC/diagnostic tests, in **106.601 seconds**.
+- **Eight Android unit tests passed**, no failures: **161 passing tests total**.
+- Combined `testDebugUnitTest lintDebug assembleDebug --max-workers=1 --no-parallel`: **BUILD SUCCESSFUL** in **1 minute 31 seconds**. Lint: **zero errors, 14 warnings**. Unrelated lint warnings and the earlier SDK XML tooling warning remain recorded; dependencies were not upgraded.
+- Installed deliverable: `dist/E-Ink-Precommitment-Mode-1.0.3.apk`, **7,118,216 bytes**, SHA-256 `6d39ea18a60a52db53f9ca26e0cc9056daf5ddccf2daadb98af2fa9d1ae8a4ec`.
+- Canonical shell source, embedded APK asset, and installed live controller are byte-for-byte equal, SHA-256 `31168cd6877373bf44cf2deef2109767dea224cad0e6b5ed19429cd4813a89b1` (37,837 bytes, LF). Equality was verified directly rather than trusting a version marker.
+- APK debug signature verified. Certificate SHA-256: `bb57ddf958f90324e214020a7f65e5aba9f4e3dd7ba1ebd6454868af8cb41d2e`.
 
-### Confirmed OEM boot-state rejection and correction
+### Final UI verification
 
-Decompiled TCL `PhoneWindowManager` and SystemUI confirmed that **`TSWT_state=-1` is a legitimate OEM boot sentinel**. The previous strict native reader accepted only 0 or 1 and failed after three reads of this boot state. The corrected reader accepts exactly -1 as an unknown native snapshot; the input monitor can remain ready in `WAIT_SWITCH`. While the native state is unknown, it sends no mode commands and does not infer a physical switch position. Active entry, recovery, and restoration retain their **45-second bounds** rather than waiting indefinitely.
+On the final installed controller in Island profile 10, all duration selections were acknowledged: **7200, 14400, 21600, 43200, and 300 seconds**. Fresh UI selected highlights matched; the default was restored to 300 seconds. Evidence is in ignored `logs/final-timer-choices.json`.
 
-The corrected canonical controller SHA-256 is `d09b9110bd80c01081e2e8aa66c86605ebf0e402d2d619ed11c7052f49be2627`. Its final APK hash, installation, and live asset confirmation are pending.
+Island now accurately shows physical Ink / Max Ink and physical Normal / Normal while its local secure resolver still lacks those fields. Arabic/English switching, the exact English brand in Arabic, compact timer controls, and the bottom language button were verified. Screenshots are retained under ignored `captures/final-active-en.png`, `captures/final-active-ar.png`, and `captures/final-ready-ar.png`. Earlier Arabic RTL checks at **200% font size** kept Stop, timers, and language reachable across two scroll positions; the original font scale **0.85** was restored.
 
-### Completed baseline before this update
+An earlier fast tap occurred before the preceding selection acknowledgment. The static status-polling gate was corrected; QA waited for acknowledgment between taps. That observation does not establish status polling as its cause.
 
-- `python -m unittest -v`: **110 passed**, no failures or skips, in 39.176 seconds. This includes 73 PC/diagnostic tests and 37 regressions executing the shipped shell with fake Android commands.
-- `testDebugUnitTest`: **NO-SOURCE**. There were no Android unit-test sources before this update.
-- `lintDebug`: **failed with 5 errors and 21 warnings**. The five errors were `StringFormatInvalid` records caused by literal `100% Safe` copy in the English/Arabic safety guide and English Shizuku-help title. The refreshed concise help removes that absolutist wording; current lint results are recorded below.
-- Separate `assembleDebug --max-workers=1 --no-parallel --console=plain`: **BUILD SUCCESSFUL**. Its APK is version **1.0.2 / code 3**, 7,102,188 bytes, and the bundled controller is byte-for-byte equal to the canonical script. SHA-256: `38bfdaa2c9dd040dd407e963f47ba4014d90e3866d82791aad554defa41d5f7f`.
-- The build emitted an SDK-tooling metadata warning: the installed tool understood SDK XML through version 3 while encountering version 4. This did not prevent APK assembly.
+### Physical entry, expiry, and restoration on the final controller
 
-### Completed 1.0.3 local verification
+The final controller accepted its **first-ever raw ON event, sequence 1**, at device uptime **15072**, with no earlier OFF. It confirmed `COMMITTED` at **15081**, establishing deadline **15381**: exactly **300 seconds**.
 
-- Root Python suite: **147 passed**, no failures or skips, comprising 73 PC/diagnostic tests and **74 shell-controller regressions**, in **51.472 seconds**. Coverage includes the OEM boot sentinel and the Stop/reset check that five minutes is authoritative when the daemon exits.
-- Android `testDebugUnitTest`: **seven tests passed**.
-- Android `lintDebug`: **zero errors and 14 warnings**. The existing SDK-tooling metadata warning and unrelated lint warnings remain documented; dependencies were not upgraded as part of this update.
-- Combined `testDebugUnitTest lintDebug assembleDebug --max-workers=1 --no-parallel`: **BUILD SUCCESSFUL** in **15 seconds** after the boot-state correction. The APK remains version **1.0.3 / code 4**.
-- The preceding Stop/reset correction was installed and its live controller SHA-256 verified as `c563ffdbe75269478d216c175eb5bf5825de20da0a62472e190d860b665c7f8c`.
-- That preceding artifact was `dist/E-Ink-Precommitment-Mode-1.0.3.apk`, **7,118,004 bytes**, SHA-256 `77856dabb06c6c1097363fb61f386de019c26069e9dc1d87b64e83e9d97f5f10`, with a byte-exact controller asset. It precedes the boot-state correction and is not its final artifact record.
-- The preceding APK debug signature was verified; certificate SHA-256: `bb57ddf958f90324e214020a7f65e5aba9f4e3dd7ba1ebd6454868af8cb41d2e`. The new artifact/signature/live hash checks are pending.
-- An earlier 1.0.3 build was installed with live controller SHA-256 `11006cbda58fe697c15e3114daf09e853d9355a14528115724745b059391dc3f` for the UI checks below.
+At **15381** it entered `EXTENDED` with zero observed delay, physical ON, and fully settled native Ink. Read-only assertions retained the original deadline and next duration 300 throughout. A physical OFF, sequence 2, at **15471** entered `RESTORING` at **15472**, reached fully Normal at **15477**, and acknowledged `IDLE` at **15479**. The user confirmed that Normal remained after 20 seconds. This completed the full default five-minute trial and post-expiry physical restoration. Evidence is in ignored `logs/default-five-minute-expiry.jsonl`.
 
-### Completed UI verification on the earlier 1.0.3 build
+The last verified handset state at uptime **16260** was **IDLE / physical OFF / next duration 300 / native Normal**. The guard remains enabled and ready for the next physical Ink event.
 
-Fresh handset UI hierarchies and acknowledged backend status confirmed every preset: **7200, 14400, 21600, and 43200 seconds**, with **300 seconds** as the default. The selected highlight matched the acknowledged choice. An earlier fast tap was not accepted while the previous selection was awaiting acknowledgment; the static status-polling gate was corrected, and final QA waited for each selection acknowledgment before the next tap. The earlier observation does not establish status polling as its cause.
+### Recovery and active Stop on the preceding controller
 
-The dynamic Arabic/English language button was tested, and the exact English app name was retained in the Arabic UI. At **200% font size**, Arabic RTL layout kept emergency Stop, timer choices, and the bottom language button reachable across two scroll positions. The handset's original font scale of **0.85** was restored after inspection.
+After removing the magnetic case and holder and using direct USB, the preceding boot-state-corrected controller (`d09b9110bd80c01081e2e8aa66c86605ebf0e402d2d619ed11c7052f49be2627`) accepted physical ON sequence 5 at **13864**, entered `STARTING` at **13865** with **7200 seconds**, observed settled Ink at **13871**, and confirmed `COMMITTED` at **13874**, deadline **21074**, next duration **300**. This verified two-hour selection consumption/reset; the full two-hour period was not observed.
 
-### Remaining 1.0.3 handset verification
+**Five consecutive real physical early OFF recoveries passed**. OFF sequences 6, 8, 10, 12, and 14 recovered in **15, 17, 17, 19, and 18 seconds**. Every recovery preserved session start **13874** and deadline **21074**. Private summary: `logs/physical-recovery-summary.json`.
 
-An initial attempted physical-slider trial produced no raw input event or native mode change, and the user confirmed that the phone remained on its regular app screen. The live controller stayed in `WAIT_SWITCH` with physical position `UNKNOWN`; it was stopped through the app to isolate native switch behavior.
+Separately, **three framework-injected native exits using key 344** fully recovered in **15.85, 14.77, and 15.85 seconds**, preserving deadline 21074. Raw physical OFF remained sequence 14. These are three native-exit trials, not additional physical-slider trials. Evidence: `logs/native-recovery-trials.jsonl`. No raw events were injected; a `sendevent` attempt was denied before changing device state and is not counted.
 
-After a reboot with the guard disabled, one physical Ink movement produced `KEY_BRIGHTNESS_MIN` at device uptime **136.86 seconds**, incremented the ON interrupt counter (IRQ 57) to 1, and fully entered native Max Ink. A later ON incremented that counter to 2, but the OFF interrupt counter (IRQ 60) remained 0 despite a reported Normal movement. Native framework key **343** also fully entered Max Ink in an isolated test. These establish individual native entry paths, not a controlled commitment. The subsequent guard remained in `WAIT_SWITCH`/`UNKNOWN`; no session began. Idle app Stop intentionally ended monitoring while leaving native Ink unchanged.
+Active Stop through the profile-10 app also passed: STOP recorded at **14687**, key 344 at **14688**, fully Normal at **14695**, and acknowledgment at **14697**. The daemon stopped, session start/deadline became zero, next duration became 300, and native mode/transition flags were all zero. Those recovery and Stop trials used the preceding controller; the final controller changed duration locking and completed the separate five-minute trial above.
 
-**No live commitment, recovery, expiry, or active-session emergency Stop trial has passed on the updated app.** The missing physical OFF input and repeated switching remain under investigation. Planned simulated raw events will be labeled as pipeline QA and will not count as physical-slider validation.
+### Magnetic accessories and remaining acceptance
 
-Artifact/install/live confirmation of the boot-state correction and physical-switch acceptance remain pending. Required live scenarios are first fresh Ink entry into a controlled session; **20 consecutive physical-switch early exits and recoveries** with an unchanged deadline; a native exit while the physical switch stays in Ink; expiry in both switch positions; rapid reversals; screen sleep/wake; active-session emergency Stop; Shizuku loss/recovery; and restart behavior. Preset selection is verified above; active duration consumption/reset still needs the corresponding live session checks. An actual long-duration screen-off trial remains necessary before claiming sustained enforcement.
+The user confirmed that both the case and holder were magnetic. Raw physical detection and controlled entry were observed after their removal. TCL explains that magnets near the NXTPAPER key can interfere with it and recommends removing magnetic cases. Remove magnetic cases and holders before switch testing or pairing troubleshooting. [TCL NXTPAPER key guidance](https://www.tcl.com/global/en/support-mobile/faq/q1770346246101540)
 
-Arabic/English UI and enlarged-font reachability are verified above. Automated tests and short simulated timers do not establish hours of real device reliability. `scripts/device_qa.py` can capture bounded native-state snapshots and framework-key exit/recovery trials under ignored `logs/`; those injected exits do not satisfy the 20 physical-switch trial requirement.
+**Twenty consecutive physical recoveries are not yet validated**; only five consecutive physical recoveries were observed on the preceding controller. Full 2/4/6/12-hour operation, screen sleep/wake, active crashes, reboot/Shizuku recovery, calling, and USB-disconnection behavior still need recorded trials. Automated tests and injected native exits do not establish those outcomes. The final five-minute expiry/restoration and current UI results do not imply sustained reliability under all conditions.
 
-### Git and two-PC readiness
+### Baseline and Git readiness
 
-The source has portable build configuration and passing local checks, with remaining handset acceptance recorded above. The repository has no initial commit or GitHub remote. Existing root files are intent-to-add entries; the Android project, canonical shell, USB helpers, and shell-controller tests are untracked. No staging, committing, or pushing was performed during this update. Generated builds, SDK paths, signing keys, `captures/`, and `current_phone_screen*.png` are ignored. The required branding source and runtime launcher PNGs remain eligible for source commits.
+Before this update, Python had **110 passing tests**, Android unit tests were `NO-SOURCE`, and lint failed with **5 errors and 21 warnings** from literal `100% Safe` formatting. The 1.0.2 APK assembled separately. The SDK tool also warned that it understood XML through version 3 while encountering version 4. These baseline facts are distinct from the final successful results above.
 
-Both PCs need JDK 17, SDK platform 36/build-tools 36.0.0, and their own ignored `nxtpaper_guard/local.properties`. Commit the Gradle wrapper and reviewed source together. Updating the same installed app from both PCs requires the same private signing key; that key must remain outside GitHub. Final source and staged-diff review remains required before creating the first source commit.
+Current branch: `codex/nxtpaper-demo`. Existing HEAD: **`2eba81f`**, subject **`01`**. Existing `origin`: [AnalogAnchor_NXTPAPER_E-Ink-Pre-Commitment-Mode](https://github.com/anchorminimalism-del/AnalogAnchor_NXTPAPER_E-Ink-Pre-Commitment-Mode). The latest update consists of **ten tracked modified files**, uncommitted and ready for review. The agents did not stage, commit, or push.
+
+Generated builds/APKs, SDK paths, signing keys, private logs, `captures/`, and `current_phone_screen*.png` are ignored. Required branding PNGs, wrapper, Android source, shell, scripts, and tests are tracked. Both PCs need JDK 17, SDK platform 36/build-tools 36.0.0, and their own ignored `local.properties`. Updating the same installed app from both PCs requires the same private signing key kept outside GitHub. Review and commit the source changes, then push them to the existing repository so the other PC can pull them.
+
 
 ## Supported handset
 
@@ -98,7 +98,7 @@ Read-only inspection verified the physical-switch mapping:
 
 The controller listens to raw physical input separately from injected framework keys. Its own mode commands therefore do not count as another physical slider movement or renew the commitment timer.
 
-## Live controller validation
+## Historical USB-connected PC controller validation (3 October)
 
 A corrected **60-second trial passed** on the connected handset. The physical slider stayed ON during an ADB-injected native exit (`344`), controller re-entry, and expiry restoration. Times below are seconds after native Max Ink was confirmed and the commitment began:
 
@@ -118,16 +118,16 @@ An initial 30-second trial exposed an OEM transition-state timing issue and fail
 
 An **idle input-monitor failure trial** on an earlier controller revision deliberately terminated only its exact child ADB `getevent` process while the controller was Ready and the phone was normal. The controller detected the ended input stream, attempted normal restoration with `344`, confirmed normal mode, recorded the failure, and exited with status `2`. No commitment session began. This is narrower than a controller crash or USB loss during active Max Ink.
 
-A completed 300-second PC trial is not recorded here. The full five-minute result and physical early-exit checks remain **pending**; starting or confirming entry is not a completed pass.
+A completed 300-second trial of the original PC controller is not recorded here. Its full five-minute result and physical early-exit checks remain **pending**. The final standalone APK's completed five-minute trial is recorded above.
 
 Evidence is retained locally under the ignored `logs` directory. The injected-exit and idle-failure tests do not establish repeated physical-slider behavior, screen-sleep behavior, calling, active-session crashes, or USB-disconnection recovery.
 
-## Demonstration status and limits
+## Historical PC demonstration status and limits
 
 - All four native entry/restore experiments above succeeded on the tested handset.
 - Standalone native transitions took roughly **5–7 seconds** to fully settle. Inspection found the native framework's first animation-completion check uses **4,000 ms**. Full early-exit recovery took about **13 seconds** in the controller trial; the proposed two-second recovery target is **not met**.
 - Normal-mode visibility is possible during early-exit recovery; the trial measured full native state settling rather than promising an immediate screen change.
-- The PC controller implements a default 300-second deadline, early-exit re-entry without renewing that deadline, expiry restoration, physical-OFF rearming, and an operator stop. The full five-minute live trial is **pending**.
+- The PC controller implements a default 300-second deadline, early-exit re-entry without renewing that deadline, expiry restoration, physical-OFF rearming, and an operator stop. Its full five-minute live trial is **pending**; this is separate from the verified final standalone APK trial.
 - Screen sleep, repeated slider movements, normal calling, active-session process crashes, and USB-disconnection recovery still require recorded live validation. Automated tests cover software behavior and do not establish these handset outcomes.
 - USB disconnection, PC sleep, or forced process termination can prevent automatic restoration. Manual recovery is to unlock the phone and move the slider to Ink, then back to normal.
 - The Zenith monitor was stopped for testing. The Analog Anchor app need not be selected for Max Ink because enforcement runs on the PC.

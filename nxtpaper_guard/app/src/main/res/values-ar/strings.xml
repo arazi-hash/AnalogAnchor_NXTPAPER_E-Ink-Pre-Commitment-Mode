@@ -23,7 +23,7 @@
     <string name="hardware_state">المفتاح: %1$s • الشاشة: %2$s</string>
     <string name="hardware_help_accessibility">شرح التعرّف على موضع المفتاح</string>
     <string name="hardware_help_title">المفتاح الجانبي</string>
-    <string name="hardware_help_message">حرّك المفتاح الجانبي إلى Max Ink لبدء المدة التي اخترتها. إذا كان في وضع الحبر، حرّكه إلى العادي ثم Max Ink.\n\nأثناء الالتزام، تعود الشاشة إلى Max Ink إذا رجعت مبكرًا إلى العادي. انتقال الشاشة يستغرق بضع ثوانٍ.</string>
+    <string name="hardware_help_message">حرّك المفتاح الجانبي إلى Max Ink لبدء المدة التي اخترتها. إذا كان في وضع الحبر، حرّكه إلى العادي ثم Max Ink.\n\nأثناء الالتزام، تعود الشاشة إلى Max Ink إذا رجعت مبكرًا إلى العادي. قد تستغرق العودة نحو ٢٠ ثانية.\n\nإذا لم يستجب المفتاح، أبعد الغطاء أو الحامل المغناطيسي عن الهاتف ثم جرّب مرة أخرى.</string>
     <string name="state_unknown">لم يُكتشف بعد</string>
     <string name="switch_ink">حبر</string>
     <string name="switch_normal">عادي</string>

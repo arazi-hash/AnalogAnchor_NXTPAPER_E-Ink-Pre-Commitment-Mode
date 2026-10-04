@@ -2,15 +2,16 @@
 
 ## Standalone Android app (1.0.3 / code 4)
 
-The Android app in `nxtpaper_guard/` uses Shizuku to run its bundled controller on the phone. Starting the guard deploys the controller and verifies its live process and input monitor. This is a personal test build for the TCL NXTPAPER 70 Pro firmware described in [FINDINGS.md](FINDINGS.md). Version **1.0.3 / code 4** builds with passing local checks. An earlier 1.0.3 build passed all four preset choices, the five-minute default, and bilingual UI checks on the handset; the Stop/reset correction was subsequently installed and its live controller verified. The latest boot-state correction awaits artifact and installation verification. No completed live commitment, recovery, or expiry trial is recorded yet.
+The Android app in `nxtpaper_guard/` uses Shizuku to run its bundled controller on the phone. Starting the guard deploys the controller and verifies its live process and input monitor. This is a personal test build for the TCL NXTPAPER 70 Pro firmware described in [FINDINGS.md](FINDINGS.md). Final version **1.0.3 / code 4** is installed, with source, APK asset, and live controller verified byte-for-byte equal. Its first physical Ink event started the default five-minute session; expiry kept Ink active until a physical Normal movement restored normal mode. Five consecutive physical early-exit recoveries and active Stop passed on the preceding controller. Twenty consecutive recoveries and sustained hours remain pending.
 
-1. Install the updated APK, start the official Shizuku app, and grant this app Shizuku permission when requested.
-2. Start the guard. The default commitment is **five minutes**. Optional **2, 4, 6, or 12 hour** buttons select the next session only.
-3. Move the physical switch to **Ink**. The first fresh physical Ink event starts entry; there is no three-move calibration. If the switch was already in Ink when the guard started, move it to Normal, let the native transition finish, then move it to Ink.
-4. The selected duration is consumed when entry starts, and the next-session setting returns to five minutes. The active duration stays fixed. The countdown begins only after native Max Ink is fully confirmed.
-5. During the commitment, an attempt to return to Normal triggers native Ink recovery without restarting the deadline. TCL's transition and recovery can take several seconds; the app does not promise an immediate screen change.
-6. After the commitment ends, leaving the physical switch in Ink keeps reading open. Move it to Normal when finished. The controller's injected commands do not count as physical switch movements.
-7. Use the emergency **Stop** override whenever needed. During an active controlled session it cancels the commitment and verifies normal restoration. Stopping idle monitoring leaves the phone's native mode unchanged. Stop, an error, or reboot clears the optional duration back to five minutes.
+1. Remove magnetic cases and holders before testing the physical switch or troubleshooting pairing. TCL warns that magnets near the NXTPAPER key can interfere with it. [TCL's official guidance](https://www.tcl.com/global/en/support-mobile/faq/q1770346246101540)
+2. Install the updated APK, start the official Shizuku app, and grant this app Shizuku permission when requested.
+3. Start the guard. The default commitment is **five minutes**. Optional **2, 4, 6, or 12 hour** buttons select the next session only.
+4. Move the physical switch to **Ink**. The first fresh physical Ink event starts entry; there is no three-move calibration. If the switch was already in Ink when the guard started, move it to Normal, let the native transition finish, then move it to Ink.
+5. The selected duration is consumed when entry starts, and the next-session setting returns to five minutes. The active duration stays fixed. The countdown begins only after native Max Ink is fully confirmed.
+6. During the commitment, an attempt to return to Normal triggers native Ink recovery without restarting the deadline. Measured physical recovery took **15–19 seconds**; allow around 20 seconds for the native transition rather than expecting an immediate screen change.
+7. After the commitment ends, leaving the physical switch in Ink keeps reading open. Move it to Normal when finished. The controller's injected commands do not count as physical switch movements.
+8. Use the emergency **Stop** override whenever needed. During an active controlled session it cancels the commitment and verifies normal restoration. Stopping idle monitoring leaves the phone's native mode unchanged. Stop, an error, or reboot clears the optional duration back to five minutes.
 
 The compact Arabic and English screen keeps the app name **E-Ink Pre-commitment Mode** in both languages, with the language button at the bottom showing the other language. It shows the commitment, optional durations, and concise guard/Shizuku/switch status. Contextual help replaces repeated reassurance text; there are no marketing or support blocks. Android status-bar, navigation-bar, and cutout insets remain respected.
 
@@ -24,7 +25,7 @@ For easier startup, use [official Shizuku 13.6 or newer](https://github.com/Rikk
 
 If Shizuku is unavailable, the app shows a recovery action. When previously enabled, the guard attempts to resume when an authorized Shizuku binder is delivered. Opening the app after starting Shizuku provides a recovery path. Optional notification permission allows a reminder after boot; declining it does not prevent the guard from running.
 
-With **no Wi-Fi after a cold boot**, a stock unrooted phone cannot be promised automatic Shizuku startup. Use USB debugging and a trusted computer to start Shizuku, then return to the app. On either Windows PC, double-click `START_SHIZUKU_USB.cmd`; it resolves the installed official launcher and has a fallback for older Shizuku. Manual recovery uses the phone's native NXTPAPER controls. After a reboot with the guard disabled, a physical Ink movement produced native Max Ink, but a reported Normal movement still produced no OFF input; repeated physical switching remains under investigation. Losing shell privilege or an OEM killing the process means commitment enforcement is unavailable; this build does not claim immunity from Android process management.
+With **no Wi-Fi after a cold boot**, a stock unrooted phone cannot be promised automatic Shizuku startup. Use USB debugging and a trusted computer to start Shizuku, then return to the app. On either Windows PC, double-click `START_SHIZUKU_USB.cmd`; it resolves the installed official launcher and has a fallback for older Shizuku. Manual recovery uses the phone's native NXTPAPER controls. Magnetic accessories should be removed before assessing a missing physical switch event; a real Ink event and controlled entry were observed after removal, while repeated switching remains under investigation. Losing shell privilege or an OEM killing the process means commitment enforcement is unavailable; this build does not claim immunity from Android process management.
 
 ### Build on either PC
 
@@ -35,13 +36,13 @@ cd nxtpaper_guard
 .\gradlew.bat testDebugUnitTest lintDebug assembleDebug --max-workers=1 --no-parallel --console=plain
 ```
 
-The Gradle output is `nxtpaper_guard/app/build/outputs/apk/debug/app-debug.apk`; the local distribution path is `dist/E-Ink-Precommitment-Mode-1.0.3.apk`. Verified artifact hashes and the pending boot-state correction are recorded in [FINDINGS.md](FINDINGS.md). `packageGuardController` copies the canonical root `nxtpaper_guard.sh` into the APK assets during the build. Generated outputs, SDK paths, device evidence, and signing keys are ignored by Git. Commit source, wrapper files, tests, and documentation to sync the two PCs. Debug signing keys are local to each PC; updating an already installed APK from the other PC requires the same private signing key. Never commit that key to GitHub.
+The Gradle output is `nxtpaper_guard/app/build/outputs/apk/debug/app-debug.apk`; the verified installed deliverable is `dist/E-Ink-Precommitment-Mode-1.0.3.apk`. Its size, hashes, and debug certificate are recorded in [FINDINGS.md](FINDINGS.md). `packageGuardController` copies the canonical root `nxtpaper_guard.sh` into the APK assets during the build. Generated outputs, SDK paths, device evidence, and signing keys are ignored by Git. Commit source, wrapper files, tests, and documentation to sync the two PCs. Debug signing keys are local to each PC; updating an already installed APK from the other PC requires the same private signing key. Never commit that key to GitHub.
 
 `UPDATE_ON_PHONE.cmd` installs the built APK on exactly one connected, authorized phone and opens it. It does not launch a second external controller. Both USB helpers find ADB through `NXTPAPER_ADB`, `PATH`, or the default local Android SDK location.
 
 Android build and controller regression results are recorded in `FINDINGS.md`. Physical-switch repetition, transition timing, Wi-Fi loss, reboot startup, and screen layout require a connected handset trial; automated tests do not establish those device outcomes.
 
-Run `python -m unittest -q` from the repository root. The current Python suite has **147 passing tests**, with no skips: 73 PC/diagnostic tests and 74 shell-controller regressions, completed in 51.472 seconds. The shell regressions execute the shipped script with fake Android commands; they do not operate a phone. On Windows they require Git for Windows' `sh.exe` (or a POSIX shell on Linux). A missing shell skips those regressions and must be reported. Android verification also passed **seven unit tests**, with **zero lint errors and 14 warnings**; the combined Gradle test/lint/debug assembly passed in 15 seconds after the boot-state correction. Stop the PC demo before using the standalone guard so only one controller manages the phone.
+Run `python -m unittest -q` from the repository root. The final Python suite has **153 passing tests**, with no failures or skips: 73 PC/diagnostic tests and 80 shell-controller regressions, completed in 106.601 seconds. The shell regressions execute the shipped script with fake Android commands; they do not operate a phone. On Windows they require Git for Windows' `sh.exe` (or a POSIX shell on Linux). A missing shell skips those regressions and must be reported. Android verification passed **eight unit tests**, making **161 passing tests** in total, with **zero lint errors and 14 warnings**. The combined Gradle test/lint/debug assembly passed in 1 minute 31 seconds. Stop the PC demo before using the standalone guard so only one controller manages the phone.
 
 ## Original USB-connected PC demo
 
@@ -141,21 +142,21 @@ Run the automated checks with:
 python -m unittest -v
 ```
 
-The original PC/diagnostic suite has **73 tests**; the current total including standalone shell regressions is **147 passed**, plus **seven Android unit tests**. The 110-test pre-update baseline and current 1.0.3 verification are separated in [FINDINGS.md](FINDINGS.md). In the historical corrected 60-second PC trial, the original deadline stayed fixed through an injected native exit. Max Ink fully recovered in about 13 seconds, the expiry command was about 0.11 seconds after the deadline, and normal mode fully settled 5.68 seconds after that command with the physical slider still ON.
+The original PC/diagnostic suite has **73 tests**; the final total including standalone shell regressions is **153 passed**, plus **eight Android unit tests**. The 110-test pre-update baseline and final 1.0.3 verification are separated in [FINDINGS.md](FINDINGS.md). In the historical corrected 60-second PC trial, the original deadline stayed fixed through an injected native exit. Max Ink fully recovered in about 13 seconds, the expiry command was about 0.11 seconds after the deadline, and normal mode fully settled 5.68 seconds after that command with the physical slider still ON.
 
 An idle monitor-failure trial on an earlier controller revision also detected a terminated input stream, attempted native normal restoration, confirmed normal mode, and exited with a failure status. It began in Ready/normal mode and did not start a commitment session.
 
-Unit checks and those short trials do not replace the full five-minute handset trial, which remains **pending**. Screen-sleep behavior, USB disconnection, active-session process crashes, repeated physical slider moves during enforcement, and normal calling also need recorded live validation. The idle monitor-failure trial does not establish recovery from those failures during Max Ink.
+The final standalone APK's full five-minute entry, expiry, and post-expiry physical Normal trial passed. The original USB-connected PC controller's full five-minute trial remains pending. Twenty consecutive physical recoveries, sustained hours, screen-sleep behavior, USB disconnection, active-session process crashes, reboot recovery, and calling still need recorded live validation. The earlier idle monitor-failure trial does not establish those outcomes.
 
-This project is separate from the landing-page repository. Its local Git branch is `codex/nxtpaper-demo`; no GitHub remote or initial commit has been created yet. Commit reviewed source and documentation to its own GitHub repository, then clone it on the second PC:
+This project is separate from the landing-page repository. Its existing [GitHub repository](https://github.com/anchorminimalism-del/AnalogAnchor_NXTPAPER_E-Ink-Pre-Commitment-Mode) is configured as `origin`; the current branch is `codex/nxtpaper-demo` and HEAD is `2eba81f` (subject `01`). The ten tracked changes from this update are uncommitted and ready for review. No staging, committing, or pushing was performed by the agents. After the reviewed changes are committed and pushed, clone the repository on the second PC:
 
 ```powershell
-git clone YOUR_REPOSITORY_URL AnalogAnchor_NXTPAPER_Demo
+git clone https://github.com/anchorminimalism-del/AnalogAnchor_NXTPAPER_E-Ink-Pre-Commitment-Mode.git AnalogAnchor_NXTPAPER_Demo
 cd AnalogAnchor_NXTPAPER_Demo
 python nxtpaper_diag.py doctor
 ```
 
-Replace `YOUR_REPOSITORY_URL` with the repository's clone URL. The original PC is ready; no downloads are needed there. On the second Windows PC:
+The original PC is ready; no downloads are needed there. On the second Windows PC:
 
 1. Install 64-bit Python 3.10 or newer from [Python's official Windows downloads](https://www.python.org/downloads/windows/). Make Python available to terminal commands during installation, then open a new PowerShell window and confirm `python --version` reports 3.10 or newer.
 2. Download the standalone Windows ZIP from [Android's official Platform Tools page](https://developer.android.com/tools/releases/platform-tools). Android Studio is unnecessary. Extract it on that PC, for example so ADB is at `C:\Tools\platform-tools\adb.exe`.
@@ -178,4 +179,4 @@ python nxtpaper_demo.py --once
 
 That temporary environment variable applies to this terminal and its child processes. Double-click launchers need ADB available through `PATH`, the default Android SDK location, or a Windows user environment variable named `NXTPAPER_ADB`. Keep the path local to each PC. Pull the latest committed changes before working.
 
-Keep private captures, screenshots, extracted APKs, observations, virtual environments, and PC-specific configuration in ignored local folders. Handset QA screenshots belong under `captures/`; the existing `current_phone_screen*.png` files are also ignored. Keep the required launcher PNGs in `nxtpaper_guard/branding/` and the Android drawable assets with the source. Review `git status` and the staged diff before committing. This checkout has no initial commit or GitHub remote yet; Android source, scripts, and controller tests must be included in the reviewed source commit before the other PC can pull them.
+Keep private captures, screenshots, extracted APKs, observations, virtual environments, and PC-specific configuration in ignored local folders. Handset QA screenshots belong under `captures/`; the existing `current_phone_screen*.png` files are also ignored. Required launcher PNGs, Android source, scripts, wrapper files, and tests are tracked source assets. Review `git status` and the source diff before committing this update; the latest changes become available to the other PC after they are committed and pushed to the existing repository.

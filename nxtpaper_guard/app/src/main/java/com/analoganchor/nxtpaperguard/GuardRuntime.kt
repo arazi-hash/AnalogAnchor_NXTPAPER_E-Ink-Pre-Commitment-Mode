@@ -22,7 +22,8 @@ object GuardRuntime {
         val errorCode: String? = null,
         val sessionStart: Long = 0,
         val deadline: Long = 0,
-        val nextDuration: Long = 300
+        val nextDuration: Long = 300,
+        val nativeInkState: Int? = null
     ) {
         val sessionDuration: Long get() = (deadline - sessionStart).coerceAtLeast(0)
     }
@@ -101,8 +102,15 @@ object GuardRuntime {
                 if (action == Action.SET_DURATION) durationFeedback(context, context.getString(R.string.error_duration_change))
                 else Result("ERROR", error = context.getString(R.string.error_guard_contact))
             }
-            val result = if (rawResult.phase == "ERROR" && rawResult.error == null)
+            val localizedResult = if (rawResult.phase == "ERROR" && rawResult.error == null)
                 rawResult.copy(error = context.getString(errorResource(rawResult.errorCode))) else rawResult
+            // Use the controller's Shizuku settings context. A cloned app's
+            // ContentResolver can read an unrelated work-profile value.
+            // This display-only snapshot cannot turn a healthy guard into ERROR.
+            val nativeInkState = if (isAuthorized()) runCatching {
+                parseNativeInkState(shell("settings get secure nxtpaper_ink_style_state", timeoutSeconds = 3))
+            }.getOrNull() else null
+            val result = localizedResult.copy(nativeInkState = nativeInkState)
             main.post {
                 if (action == Action.START && result.error == null && result.phase != "STOPPED") {
                     BootReminder.cancel(app)

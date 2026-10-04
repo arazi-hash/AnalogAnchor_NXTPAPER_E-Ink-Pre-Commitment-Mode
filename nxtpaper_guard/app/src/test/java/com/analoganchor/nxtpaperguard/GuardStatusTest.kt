@@ -1,12 +1,22 @@
 package com.analoganchor.nxtpaperguard
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
 import org.junit.Test
 import java.text.NumberFormat
 import java.util.Locale
 
 class GuardStatusTest {
+    @Test fun nativeScreenSnapshotDistinguishesModesFromUnavailableState() {
+        assertEquals(0, parseNativeInkState("0\n"))
+        assertEquals(1, parseNativeInkState("1"))
+        assertEquals(2, parseNativeInkState("2"))
+        for (unavailable in listOf(null, "", "null\n", "-1", "3", "garbage", "0\n2")) {
+            assertNull(parseNativeInkState(unavailable))
+        }
+    }
+
     @Test fun consumedLongChoiceKeepsActiveDurationIndependentFromNextDefault() {
         val status = GuardStatus.parse("COMMITTED:7190:100:7300:110:OFF::300")
         assertEquals(7200L, status.sessionDuration)

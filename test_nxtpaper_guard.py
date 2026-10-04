@@ -873,16 +873,96 @@ cat "$DURATION_COMMAND_LOCK/owner"
 """, protocol=True)
         self.assertEqual(lines, ["ERROR:0:0:0:0:UNKNOWN:DURATION_BUSY:300", "42:50:test-boot"])
 
-    def test_stale_mailbox_owner_is_reclaimed_without_signaling_process(self):
+    def test_stale_legacy_mailbox_owner_is_preserved_without_blocking_selection(self):
         lines = self.run_controller("""
 mkdir "$DURATION_COMMAND_LOCK"
 printf '42:49:old-boot\n' > "$DURATION_COMMAND_LOCK/owner"
 guard_process_info() { process_started=50; process_boot=test-boot; }
 kill() { printf 'UNSAFE KILL\n'; }
 guard_set_duration 7200
+cat "$DURATION_COMMAND_LOCK/owner"
+for reservation in "$DURATION_COMMAND_LOCK"/claim.*; do [ ! -e "$reservation" ] || exit 12; done
+""", protocol=True)
+        self.assertEqual(lines, ["STOPPED:0:0:0:0:UNKNOWN::7200", "42:49:old-boot"])
+
+    def test_orphan_empty_mailbox_lock_is_reusable_and_selection_stays_authoritative(self):
+        lines = self.run_controller("""
+mkdir "$DURATION_COMMAND_LOCK"
+guard_process_info() { process_started=50; process_boot=test-boot; }
+guard_set_duration 7200
+guard_set_duration 14400
+guard_duration_load; guard_status
 [ ! -e "$DURATION_COMMAND_LOCK" ] || exit 12
 """, protocol=True)
-        self.assertEqual(lines, ["STOPPED:0:0:0:0:UNKNOWN::7200"])
+        self.assertEqual(lines, ["STOPPED:0:0:0:0:UNKNOWN::7200", "STOPPED:0:0:0:0:UNKNOWN::14400", "STOPPED:0:0:0:0:UNKNOWN::14400"])
+
+    def test_live_mailbox_reservation_is_refused_and_active_session_is_preserved(self):
+        lines = self.run_controller("""
+commit
+mkdir -p "$DURATION_COMMAND_LOCK/claim.42.50.test-boot"
+guard_process_info() { process_started=50; process_boot=test-boot; }
+kill() { printf 'UNSAFE KILL\n'; }
+guard_set_duration 7200
+[ -d "$DURATION_COMMAND_LOCK/claim.42.50.test-boot" ] || exit 12
+guard_state
+""", protocol=True)
+        self.assertEqual(lines, ["ERROR:0:0:0:8:ON:DURATION_BUSY:300", "COMMITTED:300:8:308:8:ON::300"])
+
+    def test_only_dead_unique_mailbox_reservations_are_reclaimed(self):
+        for reservation in ("claim.42.49.test-boot", "claim.42.50.old-boot", "claim.43.50.test-boot"):
+            with self.subTest(reservation=reservation):
+                lines = self.run_controller(f"""
+PROC_ROOT=$GUARD_TEST_DIR/proc
+mkdir -p "$DURATION_COMMAND_LOCK/{reservation}"
+guard_process_info() {{ [ "$1" != 43 ] || return 1; process_started=50; process_boot=test-boot; }}
+kill() {{ printf 'UNSAFE KILL\\n'; }}
+guard_set_duration 7200
+[ ! -e "$DURATION_COMMAND_LOCK" ] || exit 12
+""", protocol=True)
+                self.assertEqual(lines, ["STOPPED:0:0:0:0:UNKNOWN::7200"])
+
+    def test_unreadable_existing_mailbox_owner_identity_is_not_treated_as_dead(self):
+        lines = self.run_controller("""
+PROC_ROOT=$GUARD_TEST_DIR/proc
+mkdir -p "$PROC_ROOT/42" "$DURATION_COMMAND_LOCK/claim.42.50.test-boot"
+guard_process_info() { [ "$1" != 42 ] || return 1; process_started=50; process_boot=test-boot; }
+guard_set_duration 7200
+[ -d "$DURATION_COMMAND_LOCK/claim.42.50.test-boot" ] || exit 12
+[ ! -e "$DURATION_FILE" ] || exit 12
+""", protocol=True)
+        self.assertEqual(lines, ["ERROR:0:0:0:0:UNKNOWN:DURATION_BUSY:300"])
+
+    def test_legacy_owner_replacement_during_validation_is_refused_and_untouched(self):
+        lines = self.run_controller("""
+mkdir "$DURATION_COMMAND_LOCK"
+printf '42:49:test-boot\n' > "$DURATION_COMMAND_LOCK/owner"
+guard_process_info() {
+  if [ "$1" = 42 ]; then printf '43:70:test-boot\n' > "$DURATION_COMMAND_LOCK/owner"; fi
+  process_started=50; process_boot=test-boot
+}
+guard_set_duration 7200
+cat "$DURATION_COMMAND_LOCK/owner"
+[ ! -e "$DURATION_FILE" ] || exit 12
+""", protocol=True)
+        self.assertEqual(lines, ["ERROR:0:0:0:0:UNKNOWN:DURATION_BUSY:300", "43:70:test-boot"])
+
+    def test_mailbox_cleanup_leaves_a_new_callers_reservation_untouched(self):
+        lines = self.run_controller("""
+PHASE=IDLE; PHYSICAL=OFF
+guard_live_pid() { return 0; }
+guard_process_info() { process_started=50; process_boot=test-boot; }
+sleep() {
+  mkdir "$DURATION_COMMAND_LOCK/claim.42.70.test-boot"
+  guard_duration_request
+}
+guard_set_duration 7200
+[ -d "$DURATION_COMMAND_LOCK/claim.42.70.test-boot" ] || exit 12
+for reservation in "$DURATION_COMMAND_LOCK"/claim.*; do
+  [ "$reservation" = "$DURATION_COMMAND_LOCK/claim.42.70.test-boot" ] || exit 12
+done
+guard_duration_load; guard_state
+""", protocol=True)
+        self.assertEqual(lines, ["IDLE:0:0:0:0:OFF::7200", "IDLE:0:0:0:0:OFF::7200"])
 
     def test_startup_failure_discards_unconsumed_long_choice(self):
         lines = self.run_controller("""
