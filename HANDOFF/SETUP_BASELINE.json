@@ -1,0 +1,9 @@
+{
+  "captured_at": "2026-10-10 15:22:44 +03:00",
+  "git_repository": true,
+  "branch": "codex/nxtpaper-demo",
+  "head": "445a03691408ac652a1206545cefe46f9529b190",
+  "status_before_handoff_setup": [],
+  "pre_existing_changed_file_sha256": {},
+  "note": "Historical setup baseline. Recheck current Git; handoff documentation was added after this snapshot. No fetch or global Git configuration change."
+}
