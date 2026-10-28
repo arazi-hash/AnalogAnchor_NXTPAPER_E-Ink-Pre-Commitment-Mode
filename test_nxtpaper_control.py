@@ -52,6 +52,7 @@ class FakeAdb(Adb):
             for prop, expected in control.PROFILE_PROPERTIES.values()
         }
         self.responses.update({
+            ("shell", "id", "-u"): captured("2000"),
             ("shell", "settings", "list", "secure"): captured(NORMAL_SETTINGS),
             ("shell", "getevent", "-lp"): captured(CAPABILITIES),
             ("shell", "cat", control.KEYLAYOUT_PATH): captured(KEYLAYOUT),
@@ -80,7 +81,7 @@ class AdapterTests(unittest.TestCase):
             with self.subTest(name=name), self.assertRaisesRegex(DiagnosticError, "Unsupported TCL firmware/profile"):
                 control.TclAdapter(FakeAdb({("shell", "getprop", prop): captured("wrong")})).validate()
 
-    def test_configuration_changes_fail_before_control_but_allow_recovery_read(self):
+    def test_configuration_changes_allow_observation_but_never_bypass_restore_gate(self):
         adb = FakeAdb()
         adapter = control.TclAdapter(adb)
         adapter.validate()
@@ -89,8 +90,9 @@ class AdapterTests(unittest.TestCase):
         with self.assertRaisesRegex(DiagnosticError, "Native switch configuration"):
             adapter.read_state()
         self.assertTrue(adapter.read_state(check_configuration=False).normal)
-        adapter.restore_normal()
-        self.assertEqual(adb.calls[-1], (("shell", "input", "keyevent", "344"), 3))
+        with self.assertRaisesRegex(DiagnosticError, "Native switch configuration"):
+            adapter.restore_normal()
+        self.assertFalse(any(command[:2] == ("shell", "input") for command, _ in adb.calls))
 
     def test_immediate_switch_guard_is_enforced(self):
         changed = NORMAL_SETTINGS.replace("tct_nxtpaper_switch_imm=1", "tct_nxtpaper_switch_imm=0")
@@ -107,10 +109,53 @@ class AdapterTests(unittest.TestCase):
         adb.calls.clear()
         adapter.enter_max_ink()
         adapter.restore_normal()
-        self.assertEqual(adb.calls, [(("shell", "input", "keyevent", "343"), 3),
-                                     (("shell", "input", "keyevent", "344"), 3)])
-        self.assertEqual(adb.command(adb.calls[0][0]),
+        injected = [(command, timeout) for command, timeout in adb.calls if command[:2] == ("shell", "input")]
+        self.assertEqual(injected, [(("shell", "input", "keyevent", "343"), 3),
+                                   (("shell", "input", "keyevent", "344"), 3)])
+        self.assertEqual(sum(command[:2] == ("shell", "getprop") for command, _ in adb.calls),
+                         2 * len(control.PROFILE_PROPERTIES))
+        self.assertEqual(sum(command == ("shell", "getevent", "-lp") for command, _ in adb.calls), 2)
+        self.assertEqual(adb.command(injected[0][0]),
                          [r"C:\Program Files\Android\adb.exe", "-s", "TCL-USB", "shell", "input", "keyevent", "343"])
+
+    def test_firmware_change_after_successful_validation_blocks_both_commands(self):
+        for operation in ("enter_max_ink", "restore_normal"):
+            with self.subTest(operation=operation):
+                adb = FakeAdb()
+                adapter = control.TclAdapter(adb)
+                adapter.validate()
+                adb.responses[("shell", "getprop", "ro.build.fingerprint")] = captured("new-firmware")
+                with self.assertRaisesRegex(DiagnosticError, "Unsupported TCL firmware/profile"):
+                    getattr(adapter, operation)()
+                self.assertFalse(any(command[:2] == ("shell", "input") for command, _ in adb.calls))
+
+    def test_lost_privilege_changed_layout_or_input_blocks_both_commands(self):
+        changes = (
+            {("shell", "id", "-u"): captured("0")},
+            {("shell", "getevent", "-lp"): captured(returncode=1)},
+            {("shell", "cat", control.KEYLAYOUT_PATH): captured(KEYLAYOUT.replace("TSWT_ON", "OTHER"))},
+        )
+        for change in changes:
+            for operation in ("enter_max_ink", "restore_normal"):
+                with self.subTest(change=change, operation=operation):
+                    adb = FakeAdb()
+                    adapter = control.TclAdapter(adb)
+                    adapter.validate()
+                    adb.responses.update(change)
+                    with self.assertRaises(DiagnosticError):
+                        getattr(adapter, operation)()
+                    self.assertFalse(any(command[:2] == ("shell", "input") for command, _ in adb.calls))
+
+    def test_unknown_or_transition_snapshot_never_authorizes_mode_command(self):
+        for state in (NORMAL_SETTINGS.replace("TSWT_state=0", "TSWT_state=-1"),
+                      NORMAL_SETTINGS.replace("nxtpaper_animation_state=0", "nxtpaper_animation_state=1")):
+            with self.subTest(state=state):
+                adb = FakeAdb({("shell", "settings", "list", "secure"): captured(state)})
+                adapter = control.TclAdapter(adb)
+                adapter.validate()
+                with self.assertRaisesRegex(DiagnosticError, "unknown or changing"):
+                    adapter.restore_normal()
+                self.assertFalse(any(command[:2] == ("shell", "input") for command, _ in adb.calls))
 
     def test_transport_errors_and_timeouts_stop_control(self):
         for response in (captured(returncode=1, stderr="device disconnected"),

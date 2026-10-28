@@ -19,6 +19,9 @@ DURATION_FILE=$BASE.duration
 DURATION_REQUEST=$BASE.duration.request
 DURATION_ACK=$BASE.duration.ack
 DURATION_COMMAND_LOCK=$BASE.duration.command.lock
+STOP_REQUEST=$BASE.stop.request
+STOP_ACK=$BASE.stop.ack
+STOP_COMMAND_LOCK=$BASE.stop.command.lock
 PROC_ROOT=/proc
 KEYLAYOUT_PATH=/system/usr/keylayout/Generic.kl
 STABLE_SECONDS=2
@@ -27,6 +30,109 @@ TRANSITION_TIMEOUT=45
 ACK_GRACE=15
 MAX_REPAIR_CYCLES=2
 DEFAULT_DURATION=300
+EXIT_DELAY=300
+PROFILE_FILE=$BASE.profile
+PROFILE_LOADED=0
+
+# Parse reviewed data, never source/eval it. Schema 1 fixes the native protocol;
+# another build may reuse it only after its own qualification and source review.
+guard_profile_load() {
+    [ "$PROFILE_LOADED" = 1 ] && return 0
+    if [ "${NXTPAPER_PROFILE_DATA+x}" = x ]; then
+        profile_text=$NXTPAPER_PROFILE_DATA
+    else
+        profile_text=$(cat "$PROFILE_FILE" 2>/dev/null) || return 1
+    fi
+    profile_record=$(printf '%s\n' "$profile_text" | awk -F= '
+      BEGIN {
+        n=split("schema id qualification model device android sdk fingerprint input_name linux_on linux_off raw_on raw_off keylayout layout_on layout_off enter_key exit_key tswt_key ink_key book_key applying_key animation_key preset_key preset immediate_key immediate evidence", keys, " ");
+        for (i=1;i<=n;i++) allowed[keys[i]]=1;
+        split("schema=1 qualification=verified input_name=tswt linux_on=592 linux_off=593 raw_on=KEY_BRIGHTNESS_MIN raw_off=KEY_BRIGHTNESS_MAX keylayout=/system/usr/keylayout/Generic.kl layout_on=TSWT_ON layout_off=TSWT_OFF enter_key=343 exit_key=344 tswt_key=TSWT_state ink_key=nxtpaper_ink_style_state book_key=nxtpaper_book_style_state applying_key=nxtpaper_is_applying_theme animation_key=nxtpaper_animation_state preset_key=tct_nxtpaper_mode_select preset=3 immediate_key=tct_nxtpaper_switch_imm immediate=1", fixed, " ");
+        for (i in fixed) { split(fixed[i], pair, "="); expected[pair[1]]=pair[2] }
+      }
+      { if (index($0,"\r")) bad=1 }
+      /^#/ || /^$/ { next }
+      { if (NF!=2 || !allowed[$1] || seen[$1]++ || $2!~/^[A-Za-z0-9_.\/:+-]+$/) bad=1; value[$1]=$2 }
+      END {
+        for (i=1;i<=n;i++) if (!seen[keys[i]]) bad=1;
+        for (k in expected) if (value[k]!=expected[k]) bad=1;
+        if (value["id"]!~/^[a-z0-9]+(-[a-z0-9]+)*$/ ||
+            value["model"]!~/^[A-Za-z0-9_-]+$/ || value["device"]!~/^[A-Za-z0-9_-]+$/ ||
+            value["android"]!~/^[1-9][0-9]*$/ || value["sdk"]!~/^[1-9][0-9]*$/ ||
+            index(value["fingerprint"],":")==0 || index(value["fingerprint"],"/")==0 ||
+            index(value["evidence"],"..") || value["evidence"]~/^\//) bad=1;
+        if (bad) exit 1;
+        for (i=1;i<=n;i++) printf "%s%s",value[keys[i]],(i==n ? "\n" : " ");
+      }') || return 1
+    read -r PROFILE_SCHEMA PROFILE_ID PROFILE_QUALIFICATION PROFILE_MODEL PROFILE_DEVICE \
+        PROFILE_ANDROID PROFILE_SDK PROFILE_FINGERPRINT PROFILE_INPUT_NAME PROFILE_LINUX_ON \
+        PROFILE_LINUX_OFF PROFILE_RAW_ON PROFILE_RAW_OFF PROFILE_KEYLAYOUT PROFILE_LAYOUT_ON \
+        PROFILE_LAYOUT_OFF PROFILE_ENTER_KEY PROFILE_EXIT_KEY PROFILE_TSWT_KEY PROFILE_INK_KEY \
+        PROFILE_BOOK_KEY PROFILE_APPLYING_KEY PROFILE_ANIMATION_KEY PROFILE_PRESET_KEY \
+        PROFILE_PRESET PROFILE_IMMEDIATE_KEY PROFILE_IMMEDIATE PROFILE_EVIDENCE <<EOF
+$profile_record
+EOF
+    PROFILE_LOADED=1
+    unset profile_text profile_record
+}
+
+guard_identity_matches() {
+    COMPAT_VERDICT=CAPABILITY_MISSING; COMPAT_REASON=PROFILE_INVALID
+    guard_profile_load || return 1
+    COMPAT_VERDICT=PRIVILEGE_UNAVAILABLE; COMPAT_REASON=SHELL_PRIVILEGE_REQUIRED
+    [ "$(id -u 2>/dev/null)" = 2000 ] || return 1
+    COMPAT_VERDICT=UNVERIFIED_BUILD; COMPAT_REASON=UNSUPPORTED_FIRMWARE
+    [ "$(getprop ro.product.model)" = "$PROFILE_MODEL" ] &&
+        [ "$(getprop ro.product.device)" = "$PROFILE_DEVICE" ] &&
+        [ "$(getprop ro.build.version.release)" = "$PROFILE_ANDROID" ] &&
+        [ "$(getprop ro.build.version.sdk)" = "$PROFILE_SDK" ] &&
+        [ "$(getprop ro.build.fingerprint)" = "$PROFILE_FINGERPRINT" ] || return 1
+    COMPAT_VERDICT=VERIFIED; COMPAT_REASON=$PROFILE_ID
+}
+
+# This entry point has no logging, notifications, settings writes, deployment,
+# duration loading, process cleanup, or native commands. Reports are observations.
+guard_compatibility_check() {
+    COMPAT_VERDICT=CAPABILITY_MISSING; COMPAT_REASON=REQUIRED_TOOL_UNAVAILABLE
+    for compatibility_tool in awk getprop settings getevent id; do
+        command -v "$compatibility_tool" >/dev/null 2>&1 || return 1
+    done
+    guard_identity_matches || return 1
+    COMPAT_VERDICT=CAPABILITY_MISSING; COMPAT_REASON=NATIVE_STATE_READ_FAILED
+    if guard_native_read; then :
+    else
+        compatibility_native_result=$?
+        [ "$compatibility_native_result" != 2 ] || COMPAT_REASON=NATIVE_PRESET_MISMATCH
+        return 1
+    fi
+    COMPAT_REASON=PHYSICAL_SWITCH_UNAVAILABLE
+    guard_discover || return 1
+    COMPAT_VERDICT=VERIFIED; COMPAT_REASON=$PROFILE_ID
+}
+
+guard_compatibility_report() {
+    guard_compatibility_check || :
+    printf '%s:%s\n' "$COMPAT_VERDICT" "$COMPAT_REASON"
+}
+
+# Only the dedicated, stopped-controller native tests use this action. The
+# Android caller serializes it with Start. Existing/ambiguous controller files
+# block tests conservatively; diagnosis itself never deletes stale evidence.
+guard_test_mode() {
+    guard_compatibility_check || { printf '%s:%s\n' "$COMPAT_VERDICT" "$COMPAT_REASON"; return 0; }
+    if [ -e "$PID_FILE" ] || [ -d "$LOCK_DIR" ]; then
+        printf 'CAPABILITY_MISSING:CONTROLLER_NOT_STOPPED\n'; return 0
+    fi
+    if [ "$TSWT" = -1 ] || [ "$APPLYING" != 0 ] || [ "$ANIMATION" != 0 ]; then
+        printf 'CAPABILITY_MISSING:NATIVE_STATE_NOT_SETTLED\n'; return 0
+    fi
+    if [ "$1" = test-ink ]; then compatibility_key=$PROFILE_ENTER_KEY
+    else compatibility_key=$PROFILE_EXIT_KEY; fi
+    input keyevent "$compatibility_key" >/dev/null 2>&1 || {
+        printf 'PRIVILEGE_UNAVAILABLE:NATIVE_COMMAND_DENIED\n'; return 0;
+    }
+    printf 'COMMAND_SENT:%s\n' "$PROFILE_ID"
+}
 
 guard_clock() {
     # Uptime includes screen sleep. Changing the wall clock cannot renew time.
@@ -61,6 +167,9 @@ guard_init() {
     STABLE=0
     ERROR_CODE=
     STOP_REQUESTED=0
+    EXIT_DEADLINE=0
+    DAEMON_STARTED=
+    DAEMON_BOOT=
     GETEVENT_PID=
     READER_PID=
     OWN_LOCK=0
@@ -77,8 +186,14 @@ guard_state() {
         remaining=$((DEADLINE - NOW))
         [ "$remaining" -ge 0 ] || remaining=0
     fi
-    printf '%s:%s:%s:%s:%s:%s:%s:%s\n' "$PHASE" "$remaining" \
-        "$SESSION_START" "$DEADLINE" "$NOW" "$PHYSICAL" "$ERROR_CODE" "$NEXT_DURATION"
+    exit_remaining=0
+    if [ "$EXIT_DEADLINE" -gt 0 ]; then
+        exit_remaining=$((EXIT_DEADLINE - NOW))
+        [ "$exit_remaining" -ge 0 ] || exit_remaining=0
+    fi
+    printf '%s:%s:%s:%s:%s:%s:%s:%s:%s:%s\n' "$PHASE" "$remaining" \
+        "$SESSION_START" "$DEADLINE" "$NOW" "$PHYSICAL" "$ERROR_CODE" "$NEXT_DURATION" \
+        "$EXIT_DEADLINE" "$exit_remaining"
 }
 
 guard_publish() {
@@ -109,6 +224,11 @@ guard_notify() {
         [ "$notification_remaining" -ge 0 ] || notification_remaining=0
         notification_key=$notification_language:$PHASE:$((notification_remaining / 60))
     fi
+    if [ "$EXIT_DEADLINE" -gt 0 ]; then
+        notification_exit_remaining=$((EXIT_DEADLINE - NOW))
+        [ "$notification_exit_remaining" -ge 0 ] || notification_exit_remaining=0
+        notification_key=$notification_key:exit:$((notification_exit_remaining / 60))
+    fi
     [ "$notification_key" != "$LAST_NOTIFICATION" ] || return 0
     LAST_NOTIFICATION=$notification_key
     if [ "$notification_language" = ar ]; then
@@ -135,6 +255,13 @@ guard_notify() {
           ERROR) notification_text='Guard unavailable. Open E-Ink Pre-commitment Mode to retry.' ;;
           *) cmd notification cancel guard_commit >/dev/null 2>&1; return 0 ;;
         esac
+    fi
+    if [ "$EXIT_DEADLINE" -gt 0 ]; then
+        if [ "$notification_language" = ar ]; then
+            notification_text="الخروج خلال $((notification_exit_remaining / 60)) دقيقة و$((notification_exit_remaining % 60)) ثانية. الالتزام مستمر حتى ذلك الوقت."
+        else
+            notification_text="Exit in $((notification_exit_remaining / 60))m $((notification_exit_remaining % 60))s. Your commitment stays active until then."
+        fi
     fi
     cmd notification post -S bigtext -t "$notification_title" -I "$ANCHOR_ICON_LARGE" -i "$ANCHOR_ICON_SMALL" guard_commit "$notification_text" >/dev/null 2>&1
 }
@@ -214,6 +341,30 @@ guard_physical_read() {
     fi
 }
 
+guard_command_gate() {
+    # PROFILE_* is loaded once and remains immutable in this controller process.
+    # A report from an earlier check cannot authorize this command.
+    guard_identity_matches || { guard_fail "$COMPAT_REASON"; return 1; }
+    gate_switch_node=$SWITCH_NODE
+    guard_discover || { guard_fail PHYSICAL_SWITCH_UNAVAILABLE; return 1; }
+    if [ -n "$gate_switch_node" ] && [ "$gate_switch_node" != "$SWITCH_NODE" ]; then
+        guard_fail PHYSICAL_SWITCH_CHANGED; return 1
+    fi
+    gate_snapshot=$TSWT:$INK:$BOOK:$APPLYING:$ANIMATION
+    if guard_native_read; then :
+    else
+        gate_native_result=$?
+        if [ "$gate_native_result" = 2 ]; then guard_fail NATIVE_PRESET_MISMATCH
+        else guard_fail NATIVE_STATE_READ_FAILED; fi
+        return 1
+    fi
+    if [ "$gate_snapshot" != "$TSWT:$INK:$BOOK:$APPLYING:$ANIMATION" ] ||
+        [ "$TSWT" = -1 ] || [ "$APPLYING" != 0 ] || [ "$ANIMATION" != 0 ]; then
+        NATIVE_SIGNATURE=; STABLE=0
+        return 2 # A fresh transition must settle in the ordinary tick loop.
+    fi
+}
+
 guard_issue() {
     key=$1
     purpose=$2
@@ -227,6 +378,24 @@ guard_issue() {
         return 0
     fi
     [ "$TSWT" != -1 ] || return 0
+    case "$key" in "$PROFILE_ENTER_KEY"|"$PROFILE_EXIT_KEY") ;;
+        *) guard_fail INVALID_NATIVE_COMMAND; return 1 ;; esac
+    if guard_command_gate; then :
+    else
+        gate_result=$?
+        [ "$gate_result" = 2 ] && return 0
+        return 1
+    fi
+    guard_clock || { guard_fail CLOCK_UNAVAILABLE; return 1; }
+    guard_exit_due || return 1
+    if [ "$PHASE" = RESTORING ] && { [ "$purpose" = ENTER ] || [ "$purpose" = RESET ]; }; then
+        return 0
+    fi
+    # The raw reader may have advanced while the compatibility observations ran.
+    guard_physical_read || return 1
+    if [ "$purpose" = EXIT ] && [ "$RESTORE_REASON" != STOP ] && [ "$PHYSICAL" = ON ]; then
+        PHASE=EXTENDED; RESTORE_REASON=; RECOVERY_AT=0; return 0
+    fi
     input keyevent "$key" >/dev/null 2>&1 || return 1
     LAST_COMMAND=$NOW
     PENDING=$purpose
@@ -295,7 +464,10 @@ guard_begin_restore() {
     RESTORE_REASON=$1
     RECOVERY_AT=0
     REPAIR_CYCLES=0
-    if [ "$1" = STOP ]; then guard_clear_duration || return 1; fi
+    if [ "$1" = STOP ]; then
+        EXIT_DEADLINE=0
+        guard_clear_duration || return 1
+    fi
     guard_log "restoring reason=$RESTORE_REASON deadline=$DEADLINE"
 }
 
@@ -329,7 +501,7 @@ guard_clear_duration() {
 }
 
 guard_duration_error() {
-    printf 'ERROR:0:0:0:%s:%s:%s:%s\n' "$NOW" "$PHYSICAL" "$1" "$NEXT_DURATION"
+    printf 'ERROR:0:0:0:%s:%s:%s:%s:0:0\n' "$NOW" "$PHYSICAL" "$1" "$NEXT_DURATION"
 }
 
 guard_duration_request() {
@@ -465,6 +637,140 @@ guard_set_duration() (
     guard_duration_error DURATION_TIMEOUT
 )
 
+guard_stop_transition() {
+    # Internal shutdown and an elapsed public request share the proven native
+    # restoration path. A pending request alone never sets STOP_REQUESTED.
+    STOP_REQUESTED=1
+    EXIT_DEADLINE=0
+    guard_clear_duration || return 1
+    case "$PHASE" in
+      WAIT_SWITCH|IDLE|WAIT_OFF) PHASE=STOPPED ;;
+      RESTORING) RESTORE_REASON=STOP ;;
+      STOPPED) ;;
+      *) guard_begin_restore STOP ;;
+    esac
+}
+
+guard_exit_due() {
+    if [ "$EXIT_DEADLINE" -gt 0 ] && [ "$NOW" -ge "$EXIT_DEADLINE" ]; then
+        guard_log "exit wait complete exit_deadline=$EXIT_DEADLINE commitment_deadline=$DEADLINE"
+        guard_stop_transition || return 1
+    fi
+}
+
+guard_stop_request() {
+    [ -r "$STOP_REQUEST" ] || return 0
+    IFS=: read -r stop_request_id stop_request_boot stop_request_pid stop_request_started stop_request_action < "$STOP_REQUEST" || return 0
+    case "$stop_request_id" in ''|*[!0-9-]*) rm -f "$STOP_REQUEST"; return 0 ;; esac
+    if [ "$stop_request_boot" != "$DURATION_BOOT" ] ||
+        [ "$stop_request_boot" != "$DAEMON_BOOT" ] ||
+        [ "$stop_request_pid" != "$$" ] || [ "$stop_request_started" != "$DAEMON_STARTED" ]; then
+        stop_reply=$(guard_duration_error STOP_STALE)
+    elif [ "$stop_request_action" != request-stop ] && [ "$stop_request_action" != cancel-stop ]; then
+        stop_reply=$(guard_duration_error STOP_INVALID)
+    else
+        # Expiry wins over a cancellation received in the same poll. Do not
+        # let COMMITTED become EXTENDED before honoring a pending exit.
+        guard_exit_due || return 1
+        if [ "$stop_request_action" = cancel-stop ]; then
+            if [ "$STOP_REQUESTED" = 1 ] || [ "$PHASE" = RESTORING ] ||
+                [ "$PHASE" = STOPPED ] || [ "$PHASE" = ERROR ]; then
+                stop_reply=$(guard_duration_error STOP_TOO_LATE)
+            else
+                [ "$EXIT_DEADLINE" = 0 ] || guard_log "exit wait cancelled request=$stop_request_id"
+                EXIT_DEADLINE=0
+                guard_publish || return 1
+                stop_reply=$(guard_state)
+            fi
+        else
+            case "$PHASE" in
+              STARTING|COMMITTED)
+                if [ "$STOP_REQUESTED" != 1 ] && [ "$EXIT_DEADLINE" = 0 ]; then
+                    EXIT_DEADLINE=$((NOW + EXIT_DELAY))
+                    if [ "$PHASE" = COMMITTED ] && [ "$DEADLINE" -lt "$EXIT_DEADLINE" ]; then
+                        EXIT_DEADLINE=$DEADLINE
+                    fi
+                    guard_log "exit wait requested exit_deadline=$EXIT_DEADLINE request=$stop_request_id"
+                fi
+                guard_exit_due || return 1 ;;
+              *) guard_stop_transition || return 1 ;;
+            esac
+            guard_publish || return 1
+            stop_reply=$(guard_state)
+        fi
+    fi
+    printf '%s:%s\n' "$stop_request_id" "$stop_reply" > "$STOP_ACK.tmp" &&
+        mv "$STOP_ACK.tmp" "$STOP_ACK" || { guard_fail STOP_ACK_FAILED; return 1; }
+    # A slow publication may outlive the caller's timeout. Remove only the
+    # consumed request, never a newer caller's replacement mailbox entry.
+    if [ -r "$STOP_REQUEST" ]; then
+        IFS=: read -r consumed_stop_id rest < "$STOP_REQUEST"
+        [ "$consumed_stop_id" != "$stop_request_id" ] || rm -f "$STOP_REQUEST"
+    fi
+}
+
+guard_change_stop() (
+    guard_duration_load || { guard_duration_error CLOCK_UNAVAILABLE; return 0; }
+    stop_action=$1
+    guard_process_info "$$" || { guard_duration_error PROCESS_IDENTITY_UNAVAILABLE; return 0; }
+    case "$process_started" in ''|*[!0-9]*) guard_duration_error PROCESS_IDENTITY_UNAVAILABLE; return 0 ;; esac
+    case "$process_boot" in ''|*[!a-zA-Z0-9-]*) guard_duration_error PROCESS_IDENTITY_UNAVAILABLE; return 0 ;; esac
+    stop_claim=$STOP_COMMAND_LOCK/claim.$$.$process_started.$process_boot
+    stop_request_token=$$-$process_started-$NOW
+    mkdir "$STOP_COMMAND_LOCK" 2>/dev/null || [ -d "$STOP_COMMAND_LOCK" ] || {
+        guard_duration_error STOP_WRITE_FAILED; return 0;
+    }
+    mkdir "$stop_claim" 2>/dev/null || { guard_duration_error STOP_BUSY; return 0; }
+    trap 'rmdir "$stop_claim" 2>/dev/null; rmdir "$STOP_COMMAND_LOCK" 2>/dev/null || :' EXIT
+    trap 'exit 1' TERM INT HUP
+    for stop_other in "$STOP_COMMAND_LOCK"/claim.*; do
+        [ -e "$stop_other" ] || continue
+        [ "$stop_other" != "$stop_claim" ] || continue
+        stop_identity=${stop_other##*/claim.}
+        stop_owner_pid=${stop_identity%%.*}
+        stop_owner_tail=${stop_identity#*.}
+        stop_owner_started=${stop_owner_tail%%.*}
+        stop_owner_boot=${stop_owner_tail#*.}
+        case "$stop_owner_pid" in ''|*[!0-9]*) guard_duration_error STOP_BUSY; return 0 ;; esac
+        case "$stop_owner_started" in ''|*[!0-9]*) guard_duration_error STOP_BUSY; return 0 ;; esac
+        case "$stop_owner_boot" in ''|*[!a-zA-Z0-9-]*) guard_duration_error STOP_BUSY; return 0 ;; esac
+        if [ "$stop_identity" != "$stop_owner_pid.$stop_owner_started.$stop_owner_boot" ] ||
+            guard_duration_owner_live "$stop_owner_pid" "$stop_owner_started" "$stop_owner_boot"; then
+            guard_duration_error STOP_BUSY; return 0
+        fi
+        rmdir "$stop_other" 2>/dev/null || { guard_duration_error STOP_BUSY; return 0; }
+    done
+    if ! guard_live_pid; then
+        if [ "$stop_action" = request-stop ]; then guard_stop
+        else guard_status; fi
+        return
+    fi
+    stop_target_pid=$live_pid
+    stop_target_started=$process_started
+    stop_target_boot=$process_boot
+    rm -f "$STOP_ACK"
+    printf '%s:%s:%s:%s:%s\n' "$stop_request_token" "$stop_target_boot" "$stop_target_pid" "$stop_target_started" "$stop_action" > "$STOP_REQUEST.tmp" &&
+        mv "$STOP_REQUEST.tmp" "$STOP_REQUEST" || { guard_duration_error STOP_WRITE_FAILED; return 0; }
+    stop_request_wait=0
+    while [ "$stop_request_wait" -le 5 ]; do
+        if [ -r "$STOP_ACK" ]; then
+            IFS=: read -r stop_ack_token stop_ack_status < "$STOP_ACK"
+            if [ "$stop_ack_token" = "$stop_request_token" ]; then
+                printf '%s\n' "$stop_ack_status"
+                return 0
+            fi
+        fi
+        [ "$stop_request_wait" -lt 5 ] || break
+        sleep 1
+        stop_request_wait=$((stop_request_wait + 1))
+    done
+    if [ -r "$STOP_REQUEST" ]; then
+        IFS=: read -r pending_stop_token rest < "$STOP_REQUEST"
+        [ "$pending_stop_token" != "$stop_request_token" ] || rm -f "$STOP_REQUEST"
+    fi
+    guard_duration_error STOP_TIMEOUT
+)
+
 guard_duration() {
     DURATION=$NEXT_DURATION
     # Consume the one-shot choice before issuing a native command. Neither a
@@ -474,6 +780,7 @@ guard_duration() {
 
 guard_tick() {
     guard_stability
+    guard_exit_due || return 1
     case "$PHASE" in
       WAIT_SWITCH)
         # Never infer an initial physical position from framework/native mode.
@@ -504,6 +811,9 @@ guard_tick() {
             SESSION_START=$NOW
             DEADLINE=$((NOW + DURATION))
             PHASE=COMMITTED
+            if [ "$EXIT_DEADLINE" -gt 0 ] && [ "$DEADLINE" -lt "$EXIT_DEADLINE" ]; then
+                EXIT_DEADLINE=$DEADLINE
+            fi
             guard_acknowledge
             RECOVERY_AT=0
             guard_log "commitment confirmed deadline=$DEADLINE"
@@ -594,13 +904,7 @@ guard_discover() {
 }
 
 guard_validate() {
-    [ "$(id -u)" = 2000 ] || { guard_fail SHELL_PRIVILEGE_REQUIRED; return 1; }
-    [ "$(getprop ro.product.model)" = T807D ] &&
-    [ "$(getprop ro.build.version.release)" = 16 ] &&
-    [ "$(getprop ro.build.version.sdk)" = 36 ] &&
-    [ "$(getprop ro.build.fingerprint)" = 'TCL/T807D_EEA/Frida:16/BP2A.250605.031.A3/AMD9:user/release-keys' ] || {
-        guard_fail UNSUPPORTED_FIRMWARE; return 1;
-    }
+    guard_identity_matches || { guard_fail "$COMPAT_REASON"; return 1; }
     validation_reads=0
     while :; do
         if guard_native_read; then break; else native_result=$?; fi
@@ -785,9 +1089,36 @@ guard_live_pid() {
     kill -0 "$live_pid" 2>/dev/null
 }
 
+guard_controller_absent() {
+    # False means possibly live as well as confirmed live. Failed /proc access
+    # is not evidence that it is safe to delete/replace a controller.
+    [ -e "$PID_FILE" ] || return 0
+    [ -r "$PID_FILE" ] || return 1
+    presence_record=$(cat "$PID_FILE" 2>/dev/null) || return 1
+    presence_pid=${presence_record%%:*}
+    case "$presence_pid" in ''|*[!0-9]*) return 1 ;; esac
+    presence_rest=${presence_record#*:}
+    presence_started=${presence_rest%%:*}
+    presence_boot=${presence_rest#*:}
+    presence_token_valid=0
+    printf '%s\n' "$presence_record" | grep -Eq '^[0-9]+:[0-9]+:[a-zA-Z0-9-]+$' && presence_token_valid=1
+    presence_actual_boot=$(cat "$PROC_ROOT/sys/kernel/random/boot_id" 2>/dev/null)
+    if [ "$presence_token_valid" = 1 ] && [ -n "$presence_actual_boot" ] &&
+        [ "$presence_boot" != "$presence_actual_boot" ]; then return 0; fi
+    if [ ! -d "$PROC_ROOT/$presence_pid" ] && [ -d "$PROC_ROOT/1" ] &&
+        ! kill -0 "$presence_pid" 2>/dev/null; then return 0; fi
+    guard_process_info "$presence_pid" || return 1
+    presence_command=$(tr '\000' '\n' < "$PROC_ROOT/$presence_pid/cmdline" 2>/dev/null)
+    [ -n "$presence_command" ] || return 1
+    if ! printf '%s\n' "$presence_command" | grep -Fx "$SCRIPT_PATH" >/dev/null; then return 0; fi
+    if [ "$presence_token_valid" = 1 ] &&
+        { [ "$presence_started" != "$process_started" ] || [ "$presence_boot" != "$process_boot" ]; }; then return 0; fi
+    return 1
+}
+
 guard_status() {
     if guard_live_pid; then
-        guard_clock || { printf 'ERROR:0:0:0:0:UNKNOWN:CLOCK_UNAVAILABLE:300\n'; return 0; }
+        guard_clock || { printf 'ERROR:0:0:0:0:UNKNOWN:CLOCK_UNAVAILABLE:300:0:0\n'; return 0; }
         if [ -r "$STATE_FILE" ]; then
             IFS=: read -r status_phase status_remaining status_start status_deadline status_at status_physical status_error < "$STATE_FILE"
             case "$status_at" in ''|*[!0-9]*) status_at=0 ;; esac
@@ -796,20 +1127,29 @@ guard_status() {
                 return 0
             fi
         fi
-        printf 'ERROR:0:0:0:%s:UNKNOWN:DAEMON_UNRESPONSIVE:%s\n' "$NOW" "$NEXT_DURATION"
+        printf 'ERROR:0:0:0:%s:UNKNOWN:DAEMON_UNRESPONSIVE:%s:0:0\n' "$NOW" "$NEXT_DURATION"
+        return 0
+    fi
+    if ! guard_controller_absent; then
+        printf 'ERROR:0:0:0:0:UNKNOWN:CONTROLLER_IDENTITY_UNAVAILABLE:%s:0:0\n' "$NEXT_DURATION"
         return 0
     fi
     if [ -r "$STATE_FILE" ] && grep -q '^ERROR:' "$STATE_FILE"; then cat "$STATE_FILE"; return 0; fi
-    printf 'STOPPED:0:0:0:0:UNKNOWN::%s\n' "$NEXT_DURATION"
+    printf 'STOPPED:0:0:0:0:UNKNOWN::%s:0:0\n' "$NEXT_DURATION"
 }
 
 guard_stop() {
     if ! guard_live_pid; then
+        if ! guard_controller_absent; then
+            printf 'ERROR:0:0:0:0:UNKNOWN:CONTROLLER_IDENTITY_UNAVAILABLE:%s:0:0\n' "$NEXT_DURATION"
+            return 1
+        fi
         # Acknowledge a stale error without touching native mode or another PID.
         PHASE=STOPPED
         ERROR_CODE=
         SESSION_START=0
         DEADLINE=0
+        EXIT_DEADLINE=0
         guard_clear_duration || return 1
         guard_publish
         guard_state
@@ -829,7 +1169,7 @@ guard_stop() {
         sleep 1
         stop_wait=$((stop_wait + 1))
     done
-    printf 'ERROR:0:0:0:0:UNKNOWN:STOP_TIMEOUT:%s\n' "$NEXT_DURATION"
+    printf 'ERROR:0:0:0:0:UNKNOWN:STOP_TIMEOUT:%s:0:0\n' "$NEXT_DURATION"
     return 1
 }
 
@@ -845,19 +1185,29 @@ guard_remove_lock() {
 }
 
 guard_main() {
-    guard_clock || { printf 'ERROR:0:0:0:0:UNKNOWN:CLOCK_UNAVAILABLE\n'; return 1; }
+    # These branches intentionally precede every stateful daemon operation.
+    case "${1:-start}" in
+      check-compatibility) guard_compatibility_report; return 0 ;;
+      test-ink|test-normal) guard_test_mode "$1"; return 0 ;;
+    esac
+    guard_clock || { printf 'ERROR:0:0:0:0:UNKNOWN:CLOCK_UNAVAILABLE:300:0:0\n'; return 1; }
     guard_init
-    guard_duration_load || { printf 'ERROR:0:0:0:0:UNKNOWN:CLOCK_UNAVAILABLE:300\n'; return 1; }
+    guard_duration_load || { printf 'ERROR:0:0:0:0:UNKNOWN:CLOCK_UNAVAILABLE:300:0:0\n'; return 1; }
     case "${1:-start}" in
       status) guard_status; return ;;
       stop) guard_stop; return ;;
+      request-stop|cancel-stop) guard_change_stop "$1"; return ;;
       set-duration)
         [ "$#" = 2 ] || { guard_duration_error DURATION_INVALID; return 0; }
         guard_set_duration "$2"; return ;;
       start) ;;
-      *) printf 'Usage: nxtpaper_guard.sh [start|status|stop|set-duration <seconds>]\n'; return 2 ;;
+      *) printf 'Usage: nxtpaper_guard.sh [start|status|request-stop|cancel-stop|stop|set-duration <seconds>]\n'; return 2 ;;
     esac
     if guard_live_pid; then guard_status; return; fi
+    if ! guard_controller_absent; then
+        printf 'ERROR:0:0:0:0:UNKNOWN:CONTROLLER_IDENTITY_UNAVAILABLE:%s:0:0\n' "$NEXT_DURATION"
+        return 1
+    fi
     if ! mkdir "$LOCK_DIR" 2>/dev/null; then
         sleep 1
         if guard_live_pid; then guard_status; return; fi
@@ -866,15 +1216,16 @@ guard_main() {
             "$GETEVENT_PID_FILE" "$GETEVENT_PID_FILE.tmp" "$READER_PID_FILE" \
             "$READER_PID_FILE.tmp" "$WRITER_PID_FILE" "$WRITER_PID_FILE.tmp" "$MONITOR_ERROR_FILE"
         rmdir "$LOCK_DIR" 2>/dev/null
-        mkdir "$LOCK_DIR" 2>/dev/null || { printf 'ERROR:0:0:0:0:UNKNOWN:START_LOCK_FAILED\n'; return 1; }
+        mkdir "$LOCK_DIR" 2>/dev/null || { printf 'ERROR:0:0:0:0:UNKNOWN:START_LOCK_FAILED:300:0:0\n'; return 1; }
     fi
     OWN_LOCK=1
-    rm -f "$DURATION_REQUEST" "$DURATION_ACK"
+    rm -f "$DURATION_REQUEST" "$DURATION_ACK" "$STOP_REQUEST" "$STOP_ACK"
     trap 'STOP_REQUESTED=1' TERM INT
     trap '' HUP
     if ! guard_tools; then :
     elif ! guard_process_identity "$$"; then ERROR_CODE=PROCESS_IDENTITY_UNAVAILABLE
-    elif ! printf '%s:%s:%s\n' "$$" "$process_started" "$process_boot" > "$PID_FILE"; then ERROR_CODE=PID_WRITE_FAILED
+    elif ! { DAEMON_STARTED=$process_started; DAEMON_BOOT=$process_boot;
+        printf '%s:%s:%s\n' "$$" "$DAEMON_STARTED" "$DAEMON_BOOT" > "$PID_FILE"; }; then ERROR_CODE=PID_WRITE_FAILED
     elif ! guard_initializing; then :
     elif ! guard_validate; then :
     elif ! guard_start_monitor; then :
@@ -893,14 +1244,9 @@ guard_main() {
     guard_publish || { guard_remove_lock; return 1; }
     while :; do
         guard_clock || { ERROR_CODE=CLOCK_UNAVAILABLE; break; }
+        guard_exit_due || break
         if [ "$STOP_REQUESTED" = 1 ]; then
-            guard_clear_duration || break
-            case "$PHASE" in
-              WAIT_SWITCH|IDLE|WAIT_OFF) PHASE=STOPPED ;;
-              RESTORING) RESTORE_REASON=STOP ;;
-              STOPPED) ;;
-              *) guard_begin_restore STOP ;;
-            esac
+            guard_stop_transition || break
         fi
         if [ "$PHASE" = STOPPED ]; then break; fi
         guard_monitor_alive || {
@@ -917,6 +1263,8 @@ guard_main() {
             # A stale snapshot must never authorize a native mode command.
             guard_publish || break
             guard_duration_request || break
+            guard_clock || { ERROR_CODE=CLOCK_UNAVAILABLE; break; }
+            guard_stop_request || break
             sleep 1
             continue
         fi
@@ -926,10 +1274,14 @@ guard_main() {
         esac
         guard_tick || { [ -n "$ERROR_CODE" ] || ERROR_CODE=NATIVE_COMMAND_FAILED; break; }
         guard_duration_request || break
+        # Native calls and publication can take time. Cancellation must be
+        # judged against fresh uptime rather than the preceding tick's time.
+        guard_clock || { ERROR_CODE=CLOCK_UNAVAILABLE; break; }
+        guard_stop_request || break
         guard_publish || break
         sleep 1
     done
-    if [ -n "$ERROR_CODE" ]; then guard_clear_duration || :; PHASE=ERROR; fi
+    if [ -n "$ERROR_CODE" ]; then guard_clear_duration || :; EXIT_DEADLINE=0; PHASE=ERROR; fi
     guard_publish
     guard_state
     guard_remove_lock

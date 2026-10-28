@@ -390,6 +390,8 @@ def build_parser():
     parser.add_argument("--output", default=str(ROOT / "logs"), help="Local capture folder (default: project logs)")
     commands = parser.add_subparsers(dest="action", required=True)
     commands.add_parser("doctor", help="Check ADB, phone authorization, and model")
+    compatibility = commands.add_parser("compatibility", help="Observe reviewed firmware capabilities; no phone writes or saved files")
+    compatibility.add_argument("--json", action="store_true", help="Print a shareable JSON report to stdout (no serial or raw settings)")
     capture = commands.add_parser("snapshot", help="Save read-only state with a label")
     capture.add_argument("label")
     capture.add_argument("--observation", default="", help="Your observed mode and physical slider position")
@@ -414,6 +416,21 @@ def main(argv=None):
         if args.action == "snapshot" and not LABEL_PATTERN.fullmatch(args.label):
             raise DiagnosticError("Invalid snapshot label. Use letters, numbers, underscores, or hyphens.")
         adb = connect(args)
+        if args.action == "compatibility":
+            from nxtpaper_compatibility import observe_compatibility
+            report = observe_compatibility(adb)
+            if args.json:
+                print(json.dumps(report, indent=2, ensure_ascii=False))
+            else:
+                print(f"Compatibility: {report['classification']}")
+                print(f"Profile: {report['profile_id'] or 'unverified build'}")
+                for check in report["checks"]:
+                    print(f"{check['name']}: {check['status']}" + (f" — {check['detail']}" if check.get("detail") else ""))
+                print(report["recovery_action"])
+                for issue in report["issues"]:
+                    print(f"Separate issue: {issue['detail']}")
+                print("Observation only; no phone settings changed and no capture folder was created.")
+            return 0 if report["classification"] == "VERIFIED" else 2
         if args.action == "doctor":
             print(f"ADB: {adb.executable}")
             print("Phone connected and authorized.")
@@ -428,6 +445,22 @@ def main(argv=None):
             watch(adb, args.output, args.seconds, args.kind)
         return 0
     except (DiagnosticError, OSError, ValueError) as error:
+        if args.action == "compatibility" and args.json:
+            connection_failed = isinstance(error, DiagnosticError)
+            report = {
+                "schema": 1, "generated_utc": utc_now(),
+                "classification": "PRIVILEGE_UNAVAILABLE" if connection_failed else "CAPABILITY_MISSING",
+                "profile_id": None, "identity": {},
+                "checks": [{"name": "adb_connection" if connection_failed else "local_profiles",
+                            "status": "fail", "detail": "No authorized unique physical phone is available."
+                            if connection_failed else "The reviewed local profile could not be loaded."}],
+                "recovery_action": "Restore authorized USB debugging/ADB access, or repair the reviewed local profile. No native command was sent.",
+                "observations": {}, "issues": [],
+                "limits": ["Observation unavailable. No phone state was changed.",
+                           "Raw connection errors are omitted from this shareable report."],
+            }
+            print(json.dumps(report, indent=2, ensure_ascii=False))
+            return 2
         print(f"Diagnostic stopped: {error}", file=sys.stderr)
         return 2
     except KeyboardInterrupt:

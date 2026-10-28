@@ -3,6 +3,8 @@ package com.analoganchor.nxtpaperguard
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.text.NumberFormat
 import java.util.Locale
@@ -41,6 +43,41 @@ class GuardStatusTest {
         val status = GuardStatus.parse("ERROR:0:0:0:100:UNKNOWN:DURATION_BUSY:300")
         assertEquals("DURATION_BUSY", status.errorCode)
         assertEquals(300L, status.nextDuration)
+    }
+
+    @Test fun pendingExitHasIndependentCountdownWithoutChangingCommitment() {
+        val status = GuardStatus.parse("COMMITTED:7100:100:7300:200:ON::300:490:290")
+        assertEquals(7200L, status.sessionDuration)
+        assertEquals(7100L, status.remaining)
+        assertEquals(490L, status.exitDeadline)
+        assertEquals(290L, status.exitRemaining)
+        assertTrue(status.exitPending)
+    }
+
+    @Test fun legacyAndClearedExitStatusesHaveNoPendingExit() {
+        for (line in listOf(
+            "COMMITTED:7100:100:7300:200:ON::300",
+            "COMMITTED:7100:100:7300:200:ON::300:0:0",
+            "RESTORING:0:100:7300:490:ON::300:0:0"
+        )) {
+            val status = GuardStatus.parse(line)
+            assertFalse(status.exitPending)
+            assertEquals(0L, status.exitRemaining)
+        }
+    }
+
+    @Test fun pendingExitAtZeroIsNotMistakenForConfirmedCancellation() {
+        val status = GuardStatus.parse("COMMITTED:6810:100:7300:490:ON::300:490:0")
+        assertTrue(status.exitPending)
+        assertEquals(0L, status.exitRemaining)
+    }
+
+    @Test fun malformedExitSuffixCannotSilentlyClearThePendingRequest() {
+        for (suffix in listOf(":490", ":490:", ":oops:20", ":490:-1", ":0:20", ":490:301")) {
+            assertThrows(IllegalArgumentException::class.java) {
+                GuardStatus.parse("COMMITTED:7100:100:7300:200:ON::300$suffix")
+            }
+        }
     }
 
     @Test fun malformedControllerStatusAndUnsupportedDurationAreRejected() {

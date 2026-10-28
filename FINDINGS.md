@@ -1,5 +1,64 @@
 # Verified NXTPAPER controls
 
+## Firmware resilience — 28 October 2026, local 1.0.5 / code 6
+
+The local successor adds one strict reviewed data-only AMD9 profile shared with PC tools and bundled in the Android APK. Unknown firmware remains unverified; changing/removing a fingerprint is not qualification. The diagnostic registry can compare additional profiles, but the current Android build and PC control adapter select the single AMD9 profile. A new native protocol requires reviewed adapter code/evidence.
+
+`python nxtpaper_diag.py compatibility --json` prints identity, per-capability checks, recovery action, package versions, update-setting limits, and separate controller observations. It changes no phone state, saves no files, and omits serials/raw settings/PID/boot tokens/raw errors. The independent on-demand EN/AR app diagnosis streams source/profile in memory without deployment, preference/language writes or ordinary status reconciliation. Reports are observations, not command authorization or physical acceptance.
+
+Fresh gates cover PC entry/restoration, shell entry/repair/restoration, and app mode tests. They require the original reviewed profile, privilege, input/keylayout, valid preset and fresh native state. A changing snapshot cannot authorize stale commands; restoration has no bypass. Tests refuse controller evidence and acknowledge dispatch only. Denied process inspection cannot authorize controller replacement; valid previous-boot tokens remain recognizable as stale. Current timers, delayed Stop/cancellation and ten-field status protocol are preserved.
+
+### Verification actually completed
+
+- Final Python discovery: **217 tests passed**, no failures/errors/skips, **168.543 seconds**: 99 PC/profile/diagnostic/demo, 110 controller/compatibility shell, 8 executing the Android runtime's embedded presence shell against fake `/proc`. Android commands are mocked in host regressions.
+- **25 Android unit tests passed**, zero failures/errors/skips: 7 compatibility, 6 exit-policy, 12 status. **242 local tests total.**
+- Integrated `testDebugUnitTest lintDebug assembleDebug --max-workers=1 --no-parallel --console=plain`: **BUILD SUCCESSFUL in 2m 47s**. Lint: **0 errors / 14 warnings**. Dependencies unchanged.
+- Final APK controller/profile assets exactly match source. Shell syntax, new EN/AR keys/format arguments, layout XML, documentation links/UTF-8/LF and whitespace checks passed. Existing layout CRLF-normalization notice is informational.
+- Earlier failing test setups (frozen clock, liveness-observation assertions and a short host timeout during overlapping Gradle work) were corrected before the final full pass. Read-only phone execution caught Android awk requiring parentheses around a printf ternary; corrected and rechecked before packaging.
+
+### Artifact identity
+
+- Deliverable: `dist/E-Ink-Precommitment-Mode-1.0.5-firmware-resilience.apk`, **6,067,137 bytes**, SHA256 `607414d93b14e5326a80c5d45cfd319bae9227c0b2c97a300648b049647cb25d`. Sidecar alongside; older APKs preserved.
+- Manifest: `com.analoganchor.nxtpaperguard`, **1.0.5 / code 6**, min SDK 26 / target SDK 36. APKv2 verifies with historical debug certificate SHA256 `bb57ddf958f90324e214020a7f65e5aba9f4e3dd7ba1ebd6454868af8cb41d2e`.
+- Controller: **57,753 bytes LF**, SHA256 `ce53dfb10c91beddabfbd8c4101db690ff9bfe8ab1ddb939b59378ca11721834`.
+- Profile: **803 bytes LF**, SHA256 `c0fa4228ebb43f16e554b67e8b86188991754be2231e6d83363ea2cffa529688`.
+- New bundle identity: SHA256(controller+NUL+profile), marker `1.0.5:dd8f0856c15a4b6c24d4213203b1b0c8c383d090077bcc52572bd5d6b2fd0833`. A marker alone still proves neither bytes nor live behavior.
+
+### Read-only phone evidence and remaining acceptance
+
+Final PC and source-via-stdin compatibility checks matched historical AMD9 structure; shell returned `VERIFIED:t807d-eea-amd9`, empty stderr. The Android embedded presence check separately identified the existing controller. The older live 1.0.3 controller still reported IDLE when sampled, hash `ef82dc007dda64392733d2cf28cd3bc9782065738ee554c08d4c20da0dad3553`. Earlier read-only inspection verified installed 1.0.4 / code 5 and its asset; this supersedes the preceding task's historical not-installed statement only for package presence, not behavioral acceptance.
+
+**No new installation, controller stop/redeployment, native key injection, updater restriction, reboot, OTA, reset/root/flashing, commit or push occurred.** The 1.0.5 APK, diagnostic-dialog handset layout, real switch/recovery, delayed Stop, long commitments and future firmware still require separate acceptance. Native package versions are comparison evidence, not a complete pinned system image. Reboot/controller loss still ends enforcement.
+
+The phone's automatic-update flag was 1 and exact updater `com.tcl.fota.system` enabled. No complete update block or exact-model downgrade is established. See [seven approaches](HANDOFF/tasks/firmware-resilience-plan-2026-10-28.md), [recovery guide](compatibility/RECOVERY.md), [Antigravity prompt](HANDOFF/tasks/antigravity-firmware-resilience-prompt.md), and [task/checkpoint](HANDOFF/tasks/firmware-resilience-2026-10-28.md). Private proof is under ignored `logs/firmware-*-2026-10-28.json`; binaries/signing material stay outside Git.
+
+## Delayed Emergency Stop — 28 October 2026, 1.0.4 / code 5
+
+This local update changes the standalone Shizuku app's normal Emergency Stop. During STARTING or COMMITTED, a request starts a 300-second uptime deadline, capped by the original commitment deadline once known. All five duration presets use this rule. The controller keeps enforcing Max Ink while waiting; a pending exit reaching either deadline restores Normal even with the physical switch still in Ink. Without an exit request, ordinary expiry continues to allow extended reading as before.
+
+Repeated requests preserve the existing exit deadline. Continue commitment removes only the exit request; it never renews the commitment. Cancellation at or after the exit deadline cannot undo restoration. Idle monitoring stops without changing native mode; completed reading begins Normal restoration immediately. Countdown zero begins restoration, and only a settled native snapshot confirms Normal.
+
+The controller exposes short `request-stop` / `cancel-stop` transactions bound to its PID/start-time/boot identity. Its status appends `exitDeadline:exitRemaining` after the existing eight fields. The Android parser accepts absent legacy fields as zero and rejects malformed present fields. The app durably disables future automatic restart before requesting exit; the existing daemon keeps enforcing. A narrowly scoped cancellation record recovers an interrupted preference update only for the same daemon and request. Command timeouts never delete live controller state. Updating a mismatched live controller no longer terminates it automatically.
+
+The compact EN/AR UI shows the exit countdown, original commitment remaining, and Continue commitment. The early-exit rule is visible before entry and in contextual help. New Start, duration, and mode-test controls wait for an initial result; native mode tests additionally require actual STOPPED status.
+
+### Local verification
+
+- **168 unique Python tests passed**, no skips: 73 PC/control/diagnostic tests in 1.086 seconds; 93 shell tests in 312.721 seconds plus two later timing regressions in 13.596 seconds. The 95 shell tests execute canonical source with fake Android commands, without operating a phone.
+- New controller cases cover all five presets, 299/300-second boundaries, earlier natural expiry, STARTING, repeated requests, cancellation/re-request, physical recovery preserving both deadlines, bilingual notifications, concurrent/stale/boot-bound mailboxes, short acknowledgements/timeouts, idle/completed stopping, fresh uptime after a slow native operation, and a sleep/missed-tick jump beyond the exit deadline. Existing bounded restoration tests remain included.
+- EN/AR resource keys and format arguments match; layout XML parses. Independent source review found and resolved stale-clock cancellation and ambiguous restoration-acknowledgement edges.
+- **18 Android unit tests passed**, no failures/errors/skips: 12 status and six cancellation-policy tests. Total: **186 local tests passed**.
+- Final `testDebugUnitTest lintDebug assembleDebug --max-workers=1 --no-parallel --console=plain`: **BUILD SUCCESSFUL in 32 seconds**, **zero lint errors and 14 warnings**. An earlier integrated rebuild passed in 3 minutes 14 seconds before removing two unused labels and documenting checked synchronous preference writes. The initial overlapping-source attempt failed when a new helper/test was added after app compilation; both later integrated runs passed. Dependency/tooling, backup/icon, resource and Kotlin-style warnings remain; dependencies were not upgraded.
+- Local deliverable: `dist/E-Ink-Precommitment-Mode-1.0.4-delayed-stop.apk`, **7,139,616 bytes**, SHA-256 `9b83a4a25b0a8bda89f5aecc434ce9ce90b858b2e7411da1536dfd929ea246d4`. Manifest verified: package `com.analoganchor.nxtpaperguard`, **1.0.4 / code 5**, min SDK 26, target SDK 36.
+- The packaged controller exactly matches canonical source: **48,439 bytes, LF**, SHA-256 `7765bcab3e277a669752f538d0b9ae4d270e552a4c44223e4a743f3e65b023d3`. APKv2 signature verifies; certificate SHA-256 `bb57ddf958f90324e214020a7f65e5aba9f4e3dd7ba1ebd6454868af8cb41d2e`, matching the historical 1.0.3 record. This is artifact evidence, not a verified installed-phone update.
+- Hash sidecar is beside the APK; ignored local proof is in `logs/delayed-exit-verification-2026-10-28.json`. Final source whitespace checks passed. No new handset screenshot, installation or acceptance is implied by local checks.
+
+### Device acceptance boundary
+
+No installation or handset operation was performed for this update. Five-minute real-time delayed exit, pending physical-switch recovery, cancellation, app closure/reopening, sleep/wake, profile-10 behavior, EN/AR layout and enlarged text remain unverified on the phone. Old 1.0.3 device evidence below does not verify the new behavior. Reboot or controller/Shizuku loss still ends enforcement; active sessions and pending exits are not restored across those losses. The original PC demonstration's operator override is unchanged.
+
+The task started clean on `codex/nxtpaper-demo` at `553ec2a`. Changes remain local; no staging, commit, push, installation or publication was performed. The new deliverable uses `dist/E-Ink-Precommitment-Mode-1.0.4-delayed-stop.apk` to preserve an older local APK named 1.0.4 that internally reports 1.0.3 / code 4. See HANDOFF/LATEST.md for the latest saved checkpoint.
+
 Investigation dates: 3–4 October 2026. These findings apply to the tested TCL NXTPAPER 70 Pro stock handset. Historical PC trials and older APKs are identified separately.
 
 ## Final standalone APK: 1.0.3 / code 4

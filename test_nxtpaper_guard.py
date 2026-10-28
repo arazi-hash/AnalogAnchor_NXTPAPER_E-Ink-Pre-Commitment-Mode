@@ -13,6 +13,7 @@ import unittest
 
 
 SCRIPT = Path(__file__).with_name("nxtpaper_guard.sh")
+PROFILE = SCRIPT.parent / "compatibility/profiles/t807d-eea-amd9.properties"
 
 
 def find_shell():
@@ -35,6 +36,8 @@ PRELUDE = r'''
 PATH=/usr/bin:/bin:$PATH
 export NXTPAPER_GUARD_SOURCE_ONLY=1
 . "$1"
+NXTPAPER_PROFILE_DATA=$(cat "$2")
+guard_profile_load || exit 91
 BASE=$GUARD_TEST_DIR/guard
 PID_FILE=$BASE.pid
 STATE_FILE=$BASE.state
@@ -50,6 +53,9 @@ DURATION_FILE=$BASE.duration
 DURATION_REQUEST=$BASE.duration.request
 DURATION_ACK=$BASE.duration.ack
 DURATION_COMMAND_LOCK=$BASE.duration.command.lock
+STOP_REQUEST=$BASE.stop.request
+STOP_ACK=$BASE.stop.ack
+STOP_COMMAND_LOCK=$BASE.stop.command.lock
 KEYLAYOUT_PATH=$GUARD_TEST_DIR/Generic.kl
 mkdir -p "$LOCK_DIR"
 printf 'key 592 TSWT_ON\nkey 593 TSWT_OFF\n' > "$KEYLAYOUT_PATH"
@@ -57,11 +63,29 @@ COMMANDS=$GUARD_TEST_DIR/commands
 : > "$COMMANDS"
 NOW=0
 guard_init
+guard_clock() { :; }
+id() { printf '2000\n'; }
+getprop() {
+  case "$1" in
+    ro.product.model) printf 'T807D\n' ;;
+    ro.product.device) printf 'Frida\n' ;;
+    ro.build.version.release) printf '16\n' ;;
+    ro.build.version.sdk) printf '36\n' ;;
+    ro.build.fingerprint) printf '%s\n' "$PROFILE_FINGERPRINT" ;;
+    *) return 1 ;;
+  esac
+}
+getevent() {
+  if [ -f "$GUARD_TEST_DIR/caps" ]; then cat "$GUARD_TEST_DIR/caps";
+  else printf 'add device 2: /dev/input/event9\n  name: "tswt"\n KEY_BRIGHTNESS_MIN KEY_BRIGHTNESS_MAX\n'; fi
+}
 guard_duration_boot() { printf '%s\n' "${TEST_BOOT:-test-boot}"; }
 input() { printf '%s %s\n' "$NOW" "$2" >> "$COMMANDS"; }
 cmd() { :; }
 settings() {
-  if [ "$1 $2" = 'list secure' ]; then cat "$GUARD_TEST_DIR/secure";
+  if [ "$1 $2" = 'list secure' ]; then
+    if [ -f "$GUARD_TEST_DIR/secure" ]; then cat "$GUARD_TEST_DIR/secure";
+    else printf 'TSWT_state=%s\nnxtpaper_ink_style_state=%s\nnxtpaper_book_style_state=%s\nnxtpaper_is_applying_theme=%s\nnxtpaper_animation_state=%s\ntct_nxtpaper_mode_select=3\ntct_nxtpaper_switch_imm=1\n' "${TSWT:-0}" "${INK:-0}" "${BOOK:-0}" "${APPLYING:-0}" "${ANIMATION:-0}"; fi
   elif [ "$1 $2 $3" = 'get system nxtpaper_guard_duration' ]; then printf '%s\n' "${FAKE_DURATION:-300}";
   fi
 }
@@ -84,6 +108,11 @@ commit() {
   tick 2 '1 2 1 1 1'
   tick 6 '1 2 1 0 0'
   tick 8 '1 2 1 0 0'
+}
+stop_mail() {
+  DAEMON_STARTED=50; DAEMON_BOOT=test-boot; DURATION_BOOT=test-boot
+  printf '%s:test-boot:%s:50:%s\n' "${2:-1-8}" "$$" "$1" > "$STOP_REQUEST"
+  guard_stop_request
 }
 result() {
   guard_state
@@ -114,7 +143,7 @@ add device 2: /dev/input/event9
 
 @unittest.skipUnless(SHELL, "A POSIX shell is required (Git for Windows includes one)")
 class GuardShellTests(unittest.TestCase):
-    def run_controller(self, scenario, files=None, protocol=False):
+    def run_controller(self, scenario, files=None, protocol=False, exit_protocol=False):
         with tempfile.TemporaryDirectory(prefix="nxtpaper-guard-test-") as folder:
             for name, content in (files or {}).items():
                 path = Path(folder, name)
@@ -125,11 +154,24 @@ class GuardShellTests(unittest.TestCase):
                     path.write_text(content, encoding="utf-8", newline="\n")
             environment = os.environ.copy()
             environment["GUARD_TEST_DIR"] = Path(folder).as_posix()
-            run = subprocess.run([SHELL, "-c", PRELUDE + scenario, "guard-test", SCRIPT.as_posix()],
+            run = subprocess.run([SHELL, "-c", PRELUDE + scenario, "guard-test", SCRIPT.as_posix(), PROFILE.as_posix()],
                                  text=True, encoding="utf-8", capture_output=True, env=environment, timeout=45)
             self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
             self.assertEqual(run.stderr, "", run.stderr)
             lines = run.stdout.strip().splitlines()
+            if not exit_protocol:
+                # Existing regressions still compare the previous eight-field
+                # protocol (including transaction-token-prefixed replies).
+                phases = {"INITIALIZING", "WAIT_SWITCH", "IDLE", "STARTING", "COMMITTED",
+                          "EXTENDED", "RESTORING", "WAIT_OFF", "STOPPED", "ERROR"}
+                normalized = []
+                for line in lines:
+                    parts = line.split(":")
+                    offset = 0 if parts[0] in phases else 1
+                    if len(parts) == 10 + offset and parts[offset] in phases:
+                        line = ":".join(parts[:-2])
+                    normalized.append(line)
+                lines = normalized
             if not protocol:
                 # Older assertions exercise the original seven-field prefix.
                 lines = [line.rsplit(":", 1)[0] if line.count(":") == 7 else line for line in lines]
@@ -362,7 +404,9 @@ if guard_discover; then exit 12; fi
             self.run_controller("if guard_native_read; then exit 12; fi\n", {"secure": bad})
 
     def test_uptime_clock_ignores_wall_time_and_includes_sleep(self):
-        lines = self.run_controller("PROC_ROOT=$GUARD_TEST_DIR/proc\nguard_clock\nprintf '%s\\n' \"$NOW\"\n", {"proc/uptime": "900.42 155.11\n"})
+        # State-machine trials freeze uptime; restore the actual shipped clock
+        # function for this direct clock test (trusted repository source only).
+        lines = self.run_controller("eval \"$(sed -n '/^guard_clock() {$/,/^}$/p' \"$1\")\"\nPROC_ROOT=$GUARD_TEST_DIR/proc\nguard_clock\nprintf '%s\\n' \"$NOW\"\n", {"proc/uptime": "900.42 155.11\n"})
         self.assertEqual(lines, ["900"])
 
     def test_cached_commitment_without_live_pid_reports_stopped(self):
@@ -768,6 +812,7 @@ id() { printf '2000\n'; }
 getprop() {
   case "$1" in
     ro.product.model) printf 'T807D\n' ;;
+    ro.product.device) printf 'Frida\n' ;;
     ro.build.version.release) printf '16\n' ;;
     ro.build.version.sdk) printf '36\n' ;;
     *) printf 'TCL/T807D_EEA/Frida:16/BP2A.250605.031.A3/AMD9:user/release-keys\n' ;;
@@ -791,6 +836,7 @@ id() {{ printf '2000\\n'; }}
 getprop() {{
   case "$1" in
     ro.product.model) printf 'T807D\\n' ;;
+    ro.product.device) printf 'Frida\\n' ;;
     ro.build.version.release) printf '16\\n' ;;
     ro.build.version.sdk) printf '36\\n' ;;
     *) printf 'TCL/T807D_EEA/Frida:16/BP2A.250605.031.A3/AMD9:user/release-keys\\n' ;;
@@ -1059,6 +1105,7 @@ id() { printf '2000\n'; }
 getprop() {
   case "$1" in
     ro.product.model) printf 'T807D\n' ;;
+    ro.product.device) printf 'Frida\n' ;;
     ro.build.version.release) printf '16\n' ;;
     ro.build.version.sdk) printf '36\n' ;;
     *) printf 'TCL/T807D_EEA/Frida:16/BP2A.250605.031.A3/AMD9:user/release-keys\n' ;;
@@ -1157,6 +1204,254 @@ result
 """)
         self.assertEqual(lines[0], "repairs=0 pending=")
         self.assertEqual(lines[-1], "commands=")
+
+    def test_delayed_stop_all_durations_waits_for_earlier_exit_or_original_expiry(self):
+        for seconds in (300, 7200, 14400, 21600, 43200):
+            exit_at = min(320, 8 + seconds)
+            with self.subTest(seconds=seconds):
+                lines = self.run_controller(f"""
+NEXT_DURATION={seconds}
+commit
+NOW=20; stop_mail request-stop
+guard_state
+tick {exit_at - 1} '1 2 1 0 0'
+result
+tick {exit_at} '1 2 1 0 0'
+guard_state
+tick {exit_at + 1} '0 0 0 1 1'
+tick {exit_at + 5} '0 0 0 0 0'
+tick {exit_at + 7} '0 0 0 0 0'
+result
+""", exit_protocol=True)
+                self.assertEqual(lines[0], f"COMMITTED:{seconds - 12}:8:{8 + seconds}:20:ON::300:{exit_at}:{exit_at - 20}")
+                self.assertEqual(lines[1], f"COMMITTED:{8 + seconds - exit_at + 1}:8:{8 + seconds}:{exit_at - 1}:ON::300:{exit_at}:1")
+                self.assertEqual(lines[2], "commands=")
+                self.assertEqual(lines[3], f"RESTORING:0:8:{8 + seconds}:{exit_at}:ON::300:0:0")
+                self.assertEqual(lines[4], f"STOPPED:0:0:0:{exit_at + 7}:ON::300:0:0")
+                self.assertEqual(lines[5], f"commands={exit_at} 344,")
+
+    def test_repeated_exit_request_is_fixed_and_cancel_restarts_only_exit_wait(self):
+        lines = self.run_controller("""
+NEXT_DURATION=7200; commit
+NOW=20; stop_mail request-stop
+NOW=25; stop_mail request-stop 2-25
+guard_state
+NOW=100; stop_mail cancel-stop 3-100
+guard_state
+tick 321 '1 2 1 0 0'
+NOW=322; stop_mail request-stop 4-322
+result
+""", exit_protocol=True)
+        self.assertEqual(lines, ["COMMITTED:7183:8:7208:25:ON::300:320:295",
+                                 "COMMITTED:7108:8:7208:100:ON::300:0:0",
+                                 "COMMITTED:6886:8:7208:322:ON::300:622:300", "commands="])
+
+    def test_cancellation_at_exit_or_natural_deadline_cannot_undo_restoration(self):
+        for seconds, exit_at in ((300, 308), (7200, 320)):
+            with self.subTest(seconds=seconds):
+                lines = self.run_controller(f"""
+NEXT_DURATION={seconds}; commit
+NOW=20; stop_mail request-stop
+NOW={exit_at}; stop_mail cancel-stop 2-{exit_at}
+cat "$STOP_ACK"
+guard_state
+tick {exit_at} '1 2 1 0 0'
+stop_mail cancel-stop 3-{exit_at}
+cat "$STOP_ACK"
+result
+""", exit_protocol=True)
+                self.assertEqual(lines[0], f"2-{exit_at}:ERROR:0:0:0:{exit_at}:ON:STOP_TOO_LATE:300:0:0")
+                self.assertEqual(lines[1], f"RESTORING:0:8:{8 + seconds}:{exit_at}:ON::300:0:0")
+                self.assertEqual(lines[2], f"3-{exit_at}:ERROR:0:0:0:{exit_at}:ON:STOP_TOO_LATE:300:0:0")
+                self.assertEqual(lines[3], lines[1])
+                self.assertEqual(lines[4], f"commands={exit_at} 344,")
+
+    def test_starting_exit_wait_begins_at_request_and_survives_native_confirmation(self):
+        lines = self.run_controller("""
+raw 1 ON 0 1 0
+tick 1 '1 2 1 1 1'
+NOW=2; stop_mail request-stop
+guard_state
+tick 6 '1 2 1 0 0'
+tick 8 '1 2 1 0 0'
+guard_state
+tick 301 '1 2 1 0 0'
+result
+tick 302 '1 2 1 0 0'
+result
+""", exit_protocol=True)
+        self.assertEqual(lines, ["STARTING:0:0:0:2:ON::300:302:300",
+                                 "COMMITTED:300:8:308:8:ON::300:302:294",
+                                 "COMMITTED:7:8:308:301:ON::300:302:1", "commands=",
+                                 "RESTORING:0:8:308:302:ON::300:0:0", "commands=302 344,"])
+
+    def test_physical_recovery_during_exit_wait_preserves_both_deadlines(self):
+        lines = self.run_controller("""
+NEXT_DURATION=7200; commit
+NOW=20; stop_mail request-stop
+raw 3 OFF 3 2 1
+tick 30 '0 0 0 0 0'
+tick 32 '0 0 0 0 0'
+tick 38 '1 2 1 0 0'
+tick 40 '1 2 1 0 0'
+raw 4 ON 3 4 1
+tick 319 '1 2 1 0 0'
+result
+tick 320 '1 2 1 0 0'
+result
+""", exit_protocol=True)
+        self.assertEqual(lines, ["COMMITTED:6889:8:7208:319:ON::300:320:1", "commands=32 343,",
+                                 "RESTORING:0:8:7208:320:ON::300:0:0", "commands=32 343,320 344,"])
+
+    def test_exit_wait_notifications_are_bilingual_and_do_not_claim_restoration(self):
+        lines = self.run_controller("""
+cmd() { printf '%s\n' "$*" >> "$GUARD_TEST_DIR/notifications"; }
+NEXT_DURATION=7200; commit
+NOW=20; stop_mail request-stop
+NOW=21; guard_notify
+printf 'ar\n' > "$LANGUAGE_FILE"
+guard_notify
+guard_notify
+guard_state
+cat "$GUARD_TEST_DIR/notifications"
+""", exit_protocol=True)
+        self.assertEqual(lines[0], "COMMITTED:7187:8:7208:21:ON::300:320:299")
+        self.assertEqual(len(lines), 4)
+        self.assertIn("Exit in 5m 0s", lines[1])
+        self.assertIn("Exit in 4m 59s", lines[2])
+        self.assertIn("الخروج خلال", lines[3])
+        self.assertNotIn("Restoring Normal", "\n".join(lines))
+
+    def test_stop_mailbox_is_bound_to_original_daemon_and_boot(self):
+        lines = self.run_controller("""
+NEXT_DURATION=7200; commit
+DAEMON_STARTED=50; DAEMON_BOOT=test-boot; DURATION_BOOT=test-boot
+printf '1-8:old-boot:%s:50:request-stop\n' "$$" > "$STOP_REQUEST"
+guard_stop_request; cat "$STOP_ACK"
+printf '2-8:test-boot:999999:50:request-stop\n' > "$STOP_REQUEST"
+guard_stop_request; cat "$STOP_ACK"
+printf '3-8:test-boot:%s:51:request-stop\n' "$$" > "$STOP_REQUEST"
+guard_stop_request; cat "$STOP_ACK"
+printf '4-8:test-boot:%s:50:invalid\n' "$$" > "$STOP_REQUEST"
+guard_stop_request; cat "$STOP_ACK"
+result
+""", exit_protocol=True)
+        for line, token, error in zip(lines, ("1-8", "2-8", "3-8", "4-8"),
+                                      ("STOP_STALE", "STOP_STALE", "STOP_STALE", "STOP_INVALID")):
+            self.assertEqual(line, f"{token}:ERROR:0:0:0:8:ON:{error}:300:0:0")
+        self.assertEqual(lines[-2:], ["COMMITTED:7200:8:7208:8:ON::300:0:0", "commands="])
+
+    def test_public_stop_request_returns_short_ack_without_waiting_for_exit(self):
+        lines = self.run_controller("""
+NEXT_DURATION=7200; commit
+DAEMON_STARTED=50; DAEMON_BOOT=test-boot
+guard_process_info() { process_started=50; process_boot=test-boot; }
+guard_live_pid() { live_pid=$$; process_started=50; process_boot=test-boot; }
+waits=0
+sleep() { waits=$((waits + 1)); guard_stop_request; }
+NOW=20; guard_change_stop request-stop
+cat "$STATE_FILE"
+[ ! -e "$STOP_REQUEST" ] && [ ! -e "$STOP_COMMAND_LOCK" ] || exit 12
+printf 'commands='; cat "$COMMANDS"
+""", exit_protocol=True)
+        self.assertEqual(lines, ["COMMITTED:7188:8:7208:20:ON::300:320:300",
+                                 "COMMITTED:7188:8:7208:20:ON::300:320:300", "commands="])
+
+    def test_public_stop_timeout_removes_only_own_request_and_releases_claim(self):
+        lines = self.run_controller("""
+guard_process_info() { process_started=50; process_boot=test-boot; }
+guard_live_pid() { live_pid=$$; process_started=50; process_boot=test-boot; }
+sleep() { :; }
+guard_change_stop request-stop
+[ ! -e "$STOP_REQUEST" ] && [ ! -e "$STOP_COMMAND_LOCK" ] || exit 12
+result
+""", exit_protocol=True)
+        self.assertEqual(lines, ["ERROR:0:0:0:0:UNKNOWN:STOP_TIMEOUT:300:0:0",
+                                 "WAIT_SWITCH:0:0:0:0:UNKNOWN::300:0:0", "commands="])
+
+    def test_concurrent_live_stop_claim_prevents_mailbox_overwrite(self):
+        lines = self.run_controller("""
+guard_process_info() { process_started=50; process_boot=test-boot; }
+guard_duration_owner_live() { return 0; }
+mkdir -p "$STOP_COMMAND_LOCK/claim.42.999.test-boot"
+printf 'existing-request\n' > "$STOP_REQUEST"
+guard_change_stop request-stop
+cat "$STOP_REQUEST"
+[ -d "$STOP_COMMAND_LOCK/claim.42.999.test-boot" ] || exit 12
+""", exit_protocol=True)
+        self.assertEqual(lines, ["ERROR:0:0:0:0:UNKNOWN:STOP_BUSY:300:0:0", "existing-request"])
+
+    def test_idle_and_extended_stop_do_not_add_exit_wait(self):
+        idle = self.run_controller("PHASE=IDLE; PHYSICAL=OFF\nstop_mail request-stop\nresult\n", exit_protocol=True)
+        self.assertEqual(idle, ["STOPPED:0:0:0:0:OFF::300:0:0", "commands="])
+        extended = self.run_controller("""
+commit
+tick 308 '1 2 1 0 0'
+NOW=320; stop_mail request-stop
+tick 320 '1 2 1 0 0'
+result
+""", exit_protocol=True)
+        self.assertEqual(extended, ["RESTORING:0:8:308:320:ON::300:0:0", "commands=320 344,"])
+
+    def test_runtime_error_clears_pending_exit_suffix(self):
+        lines = self.run_controller("""
+guard_clock() { NOW=10; }
+guard_tools() { return 0; }
+guard_process_identity() { process_started=50; process_boot=test-boot; }
+guard_validate() { return 0; }
+guard_start_monitor() { return 0; }
+guard_monitor_alive() { return 0; }
+guard_physical_read() { return 0; }
+guard_native_read() { return 0; }
+guard_tick() { PHASE=COMMITTED; SESSION_START=8; DEADLINE=7208; EXIT_DEADLINE=320; guard_fail TEST_FAILURE; }
+sleep() { :; }
+if guard_main start; then exit 12; fi
+""", exit_protocol=True)
+        self.assertEqual(lines, ["ERROR:0:8:7208:10:UNKNOWN:TEST_FAILURE:300:0:0"])
+
+    def test_slow_native_tick_refreshes_uptime_before_cancellation(self):
+        lines = self.run_controller("""
+TEST_NOW=319
+guard_clock() { NOW=$TEST_NOW; }
+guard_tools() { return 0; }
+guard_process_identity() { process_started=50; process_boot=test-boot; }
+guard_validate() { return 0; }
+guard_start_monitor() { return 0; }
+guard_monitor_alive() { return 0; }
+guard_physical_read() { return 0; }
+guard_native_read() { return 0; }
+ticks=0
+guard_tick() {
+  ticks=$((ticks + 1))
+  if [ "$ticks" = 1 ]; then
+    PHASE=COMMITTED; SESSION_START=8; DEADLINE=7208; EXIT_DEADLINE=320
+    TEST_NOW=320
+    printf '1-319:test-boot:%s:50:cancel-stop\n' "$$" > "$STOP_REQUEST"
+  else guard_fail TEST_COMPLETE; fi
+}
+sleep() { :; }
+if guard_main start; then exit 12; fi
+cat "$STOP_ACK"
+printf 'commands='; cat "$COMMANDS"
+""", exit_protocol=True)
+        self.assertEqual(lines[1:], ["1-319:ERROR:0:0:0:320:UNKNOWN:STOP_TOO_LATE:300:0:0", "commands="])
+
+    def test_sleep_jump_past_exit_deadline_restores_without_rearming_wait(self):
+        lines = self.run_controller("""
+NEXT_DURATION=7200; commit
+NOW=20; stop_mail request-stop
+tick 30 '1 2 1 0 0'
+tick 1000 '1 2 1 0 0'
+guard_state
+NOW=1001; stop_mail request-stop 2-1001
+printf 'restore_started=%s\n' "$PHASE_AT"
+stop_mail cancel-stop 3-1001
+cat "$STOP_ACK"
+result
+""", exit_protocol=True)
+        self.assertEqual(lines, ["RESTORING:0:8:7208:1000:ON::300:0:0", "restore_started=1000",
+                                 "3-1001:ERROR:0:0:0:1001:ON:STOP_TOO_LATE:300:0:0",
+                                 "RESTORING:0:8:7208:1001:ON::300:0:0", "commands=1000 344,"])
 
 
 if __name__ == "__main__":

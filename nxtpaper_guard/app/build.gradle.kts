@@ -17,8 +17,8 @@ android {
         applicationId = "com.analoganchor.nxtpaperguard"
         minSdk = 26
         targetSdk = 36
-        versionCode = 4
-        versionName = "1.0.3"
+        versionCode = 6
+        versionName = "1.0.5"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -46,15 +46,18 @@ android {
 // The APK carries the same controller reviewed and tested at the repository root.
 abstract class GuardControllerAssets : DefaultTask() {
     @get:InputFile abstract val controller: RegularFileProperty
+    @get:InputFile abstract val firmwareProfile: RegularFileProperty
     @get:OutputDirectory abstract val outputDirectory: DirectoryProperty
     @TaskAction fun generate() {
         val directory = outputDirectory.get().asFile
         directory.mkdirs()
         controller.get().asFile.copyTo(directory.resolve("nxtpaper_guard.sh"), overwrite = true)
+        firmwareProfile.get().asFile.copyTo(directory.resolve("nxtpaper_firmware.properties"), overwrite = true)
     }
 }
 val packageGuardController = tasks.register<GuardControllerAssets>("packageGuardController") {
     controller.set(rootProject.layout.projectDirectory.file("../nxtpaper_guard.sh"))
+    firmwareProfile.set(rootProject.layout.projectDirectory.file("../compatibility/profiles/t807d-eea-amd9.properties"))
     outputDirectory.set(layout.buildDirectory.dir("generated/guardAssets"))
 }
 androidComponents.onVariants { variant ->

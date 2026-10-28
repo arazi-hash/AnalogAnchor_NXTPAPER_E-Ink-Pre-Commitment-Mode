@@ -5,9 +5,13 @@ import rikka.shizuku.Shizuku
 
 class GuardApplication : Application() {
     private val binderReady = Shizuku.OnBinderReceivedListener {
-        if (GuardRuntime.desired(this) && GuardRuntime.isAuthorized()) {
-            GuardRuntime.runAsync(this, GuardRuntime.Action.START) { result ->
-                if (result.error != null) BootReminder.show(this)
+        if (GuardRuntime.isAuthorized()) {
+            // An explicit delayed stop leaves desired=false while the daemon
+            // keeps enforcing. Querying status can reconcile a saved Continue
+            // request without automatically restarting a completed stop.
+            val action = if (GuardRuntime.desired(this)) GuardRuntime.Action.START else GuardRuntime.Action.STATUS
+            GuardRuntime.runAsync(this, action) { result ->
+                if (result.error != null && GuardRuntime.desired(this)) BootReminder.show(this)
             }
         }
     }

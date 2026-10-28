@@ -16,28 +16,34 @@ import threading
 import time
 
 from nxtpaper_diag import Adb, DiagnosticError, connect, find_adb
+from nxtpaper_compatibility import (
+    CompatibilityError, discover_switch, load_profile, read_native_state,
+    validate_keylayout,
+)
 
 
-SUPPORTED_MODEL = "T807D"
-SUPPORTED_ANDROID = "16"
-SUPPORTED_SDK = "36"
-SUPPORTED_FINGERPRINT = "TCL/T807D_EEA/Frida:16/BP2A.250605.031.A3/AMD9:user/release-keys"
-KEY_ENTER_MAX_INK = 343
-KEY_RESTORE_NORMAL = 344
+FIRMWARE_PROFILE = load_profile()
+SUPPORTED_MODEL = FIRMWARE_PROFILE["model"]
+SUPPORTED_ANDROID = FIRMWARE_PROFILE["android"]
+SUPPORTED_SDK = FIRMWARE_PROFILE["sdk"]
+SUPPORTED_FINGERPRINT = FIRMWARE_PROFILE["fingerprint"]
+KEY_ENTER_MAX_INK = int(FIRMWARE_PROFILE["enter_key"])
+KEY_RESTORE_NORMAL = int(FIRMWARE_PROFILE["exit_key"])
 NATIVE_TIMEOUT_SECONDS = 3
-MODE_PRESET_KEY = "tct_nxtpaper_mode_select"
-IMMEDIATE_SWITCH_KEY = "tct_nxtpaper_switch_imm"
-KEYLAYOUT_PATH = "/system/usr/keylayout/Generic.kl"
+MODE_PRESET_KEY = FIRMWARE_PROFILE["preset_key"]
+IMMEDIATE_SWITCH_KEY = FIRMWARE_PROFILE["immediate_key"]
+KEYLAYOUT_PATH = FIRMWARE_PROFILE["keylayout"]
 
 STATE_KEYS = {
-    "tswt": "TSWT_state",
-    "ink_style": "nxtpaper_ink_style_state",
-    "book_style": "nxtpaper_book_style_state",
-    "applying": "nxtpaper_is_applying_theme",
-    "animation": "nxtpaper_animation_state",
+    "tswt": FIRMWARE_PROFILE["tswt_key"],
+    "ink_style": FIRMWARE_PROFILE["ink_key"],
+    "book_style": FIRMWARE_PROFILE["book_key"],
+    "applying": FIRMWARE_PROFILE["applying_key"],
+    "animation": FIRMWARE_PROFILE["animation_key"],
 }
 PROFILE_PROPERTIES = {
     "model": ("ro.product.model", SUPPORTED_MODEL),
+    "device": ("ro.product.device", FIRMWARE_PROFILE["device"]),
     "android_version": ("ro.build.version.release", SUPPORTED_ANDROID),
     "sdk": ("ro.build.version.sdk", SUPPORTED_SDK),
     "fingerprint": ("ro.build.fingerprint", SUPPORTED_FINGERPRINT),
@@ -121,6 +127,9 @@ class TclAdapter:
     def __init__(self, adb: Adb):
         self.adb = adb
         self._validated = False
+        # Freeze reviewed data for this adapter's lifetime. A file edited while
+        # a commitment is active cannot silently alter its commands.
+        self.profile = FIRMWARE_PROFILE
 
     def validate(self):
         """Verify this handset profile and its existing native Max Ink preset."""
@@ -142,26 +151,29 @@ class TclAdapter:
 
     def read_state(self, *, check_configuration=True):
         _require_physical(self.adb)
-        required = set(STATE_KEYS.values())
-        if check_configuration:
-            required |= {MODE_PRESET_KEY, IMMEDIATE_SWITCH_KEY}
-        values = _required_settings(
-            _checked_read(self.adb, ("shell", "settings", "list", "secure")),
-            required,
-        )
-        if check_configuration:
-            _validate_presets(values)
-        return ModeState(
-            tswt=_number(values, STATE_KEYS["tswt"], {0, 1}),
-            ink_style=_number(values, STATE_KEYS["ink_style"], {0, 1, 2}),
-            book_style=_number(values, STATE_KEYS["book_style"], {0, 1}),
-            applying=bool(_number(values, STATE_KEYS["applying"], {0, 1})),
-            animation=bool(_number(values, STATE_KEYS["animation"], {0, 1})),
-        )
+        try:
+            values = read_native_state(_checked_read(self.adb, ("shell", "settings", "list", "secure")),
+                                       self.profile, check_configuration=check_configuration)
+        except CompatibilityError as error:
+            raise DiagnosticError(str(error)) from error
+        return ModeState(values["tswt"], values["ink"], values["book"],
+                         bool(values["applying"]), bool(values["animation"]))
 
     def _keyevent(self, key):
         if not self._validated:
             raise DiagnosticError("Validate the supported phone and native preset before sending mode controls.")
+        # Never use a successful startup check as authorization for a later
+        # command. Restoration has no compatibility bypass either.
+        self.validate()
+        if _checked_read(self.adb, ("shell", "id", "-u")).strip() != "2000":
+            raise DiagnosticError("Shell privilege unavailable; no native mode command was sent.")
+        discover_switch_node(_checked_read(self.adb, ("shell", "getevent", "-lp")))
+        validate_switch_keylayout(_checked_read(self.adb, ("shell", "cat", KEYLAYOUT_PATH)))
+        if key not in (int(self.profile["enter_key"]), int(self.profile["exit_key"])):
+            raise DiagnosticError("Unreviewed native command refused.")
+        state = self.read_state()
+        if state.tswt == -1 or not state.settled:
+            raise DiagnosticError("Native mode is unknown or changing; no native command was sent. Normal is not confirmed.")
         _checked_read(self.adb, ("shell", "input", "keyevent", str(key)))
 
     def enter_max_ink(self):
@@ -173,33 +185,18 @@ class TclAdapter:
 
 def discover_switch_node(capabilities):
     """Identify the driver by name and capabilities, never by boot-dependent number."""
-    matches = list(DEVICE_BLOCK.finditer(capabilities))
-    candidates = []
-    for index, match in enumerate(matches):
-        end = matches[index + 1].start() if index + 1 < len(matches) else len(capabilities)
-        block = capabilities[match.end():end]
-        name = re.search(r'^\s*name:\s*"([^"\r\n]+)"\s*$', block, re.MULTILINE)
-        if name and name.group(1) == "tswt":
-            candidates.append((match.group("node"), block))
-    if len(candidates) != 1:
-        raise DiagnosticError(f"Expected exactly one tswt input device; found {len(candidates)}.")
-    node, block = candidates[0]
-    if not all(re.search(rf"\b{label}\b", block) for label in ("KEY_BRIGHTNESS_MIN", "KEY_BRIGHTNESS_MAX")):
-        raise DiagnosticError("The tswt device lacks the expected brightness MIN/MAX switch capabilities.")
-    return node
+    try:
+        return discover_switch(capabilities, FIRMWARE_PROFILE)
+    except CompatibilityError as error:
+        raise DiagnosticError(str(error)) from error
 
 
 def validate_switch_keylayout(text):
     """The tested firmware maps Linux MIN/592 to ON, and MAX/593 to OFF."""
-    mappings = {}
-    for line in text.splitlines():
-        fields = line.partition("#")[0].split()
-        if len(fields) >= 3 and fields[0] == "key" and fields[1] in {"592", "593"}:
-            if fields[1] in mappings:
-                raise DiagnosticError(f"Ambiguous switch keylayout mapping for Linux key {fields[1]}.")
-            mappings[fields[1]] = fields[2]
-    if mappings != {"592": "TSWT_ON", "593": "TSWT_OFF"}:
-        raise DiagnosticError("Unsupported physical-switch keylayout; expected key592 TSWT_ON and key593 TSWT_OFF.")
+    try:
+        validate_keylayout(text, FIRMWARE_PROFILE)
+    except CompatibilityError as error:
+        raise DiagnosticError(str(error)) from error
 
 
 def parse_switch_event(line, at, device_path=None):

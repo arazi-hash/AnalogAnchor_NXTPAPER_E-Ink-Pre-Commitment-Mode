@@ -19,10 +19,14 @@
                 </LinearLayout>
                 <TextView android:id="@+id/tvServiceStatus" android:layout_width="match_parent" android:layout_height="wrap_content"
                     android:gravity="center" android:text="@string/guard_checking" android:textColor="@color/white" android:textSize="18sp" android:textStyle="bold" />
+                <TextView android:id="@+id/tvCommitmentRemaining" android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp" android:gravity="center" android:textColor="@color/gray_text" android:textSize="14sp" android:visibility="gone" />
                 <TextView android:id="@+id/tvGuardError" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp"
                     android:accessibilityLiveRegion="polite" android:textColor="@color/accent_red" android:textSize="14sp" android:visibility="gone" />
                 <com.google.android.material.button.MaterialButton android:id="@+id/btnToggleService" style="@style/Widget.Material3.Button" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="48dp" android:textAllCaps="false" android:textColor="@color/accent_blue" android:text="@string/btn_start_service" android:layout_marginTop="10dp" android:backgroundTint="@color/accent_blue" app:cornerRadius="16dp" />
                 <com.google.android.material.button.MaterialButton android:id="@+id/btnCancelResume" style="@style/Widget.Material3.Button.TextButton" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="48dp" android:textAllCaps="false" android:textColor="@color/accent_blue" android:text="@string/btn_cancel_resume" android:visibility="gone" app:cornerRadius="16dp" />
+                <TextView android:id="@+id/tvExitPolicy" android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp" android:gravity="center" android:text="@string/guard_exit_policy" android:textColor="@color/gray_text" android:textSize="12sp" />
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
         <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="16dp"
@@ -59,6 +63,7 @@
         </com.google.android.material.card.MaterialCardView>
         <com.google.android.material.button.MaterialButton android:id="@+id/btnToggleTests" style="@style/Widget.Material3.Button.TextButton" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="48dp" android:textAllCaps="false" android:textColor="@color/accent_blue" android:text="@string/show_mode_tests" android:layout_marginTop="4dp" android:textSize="12sp" app:cornerRadius="16dp" />
         <LinearLayout android:id="@+id/layoutTests" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:visibility="gone">
+            <com.google.android.material.button.MaterialButton android:id="@+id/btnCheckCompatibility" style="@style/Widget.Material3.Button" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="48dp" android:textAllCaps="false" android:textColor="@color/accent_blue" android:text="@string/btn_check_compatibility" android:backgroundTint="@color/gray_border" app:cornerRadius="16dp" />
             <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/mode_tests_note" android:textColor="@color/gray_text" android:textSize="13sp" />
             <com.google.android.material.button.MaterialButton android:id="@+id/btnTestInk" style="@style/Widget.Material3.Button" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="48dp" android:textAllCaps="false" android:textColor="@color/accent_blue" android:text="@string/btn_test_ink" android:backgroundTint="@color/gray_border" app:cornerRadius="16dp" />
             <com.google.android.material.button.MaterialButton android:id="@+id/btnTestNormal" style="@style/Widget.Material3.Button" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="48dp" android:textAllCaps="false" android:textColor="@color/accent_blue" android:text="@string/btn_test_normal" android:backgroundTint="@color/gray_border" app:cornerRadius="16dp" />

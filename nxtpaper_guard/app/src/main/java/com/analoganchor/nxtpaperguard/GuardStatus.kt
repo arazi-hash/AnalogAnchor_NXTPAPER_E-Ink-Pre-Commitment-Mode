@@ -11,9 +11,12 @@ data class GuardStatus(
     val deadline: Long,
     val physical: String,
     val errorCode: String?,
-    val nextDuration: Long
+    val nextDuration: Long,
+    val exitDeadline: Long = 0,
+    val exitRemaining: Long = 0
 ) {
     val sessionDuration: Long get() = (deadline - sessionStart).coerceAtLeast(0)
+    val exitPending: Boolean get() = exitDeadline > 0
 
     companion object {
         val durations = setOf(300L, 7200L, 14400L, 21600L, 43200L)
@@ -33,10 +36,19 @@ data class GuardStatus(
             require(parts[5] in setOf("UNKNOWN", "OFF", "ON"))
             val next = if (parts.size < 8) 300L else parts[7].toLongOrNull() ?: -1L
             require(next in durations)
+            // Legacy controllers have no exit suffix. A present suffix is a pair,
+            // so a damaged response cannot silently look like a cancelled exit.
+            val exit = if (parts.size <= 8) listOf(0L, 0L) else {
+                require(parts.size >= 10)
+                parts.slice(8..9).map { it.toLongOrNull() ?: -1L }
+            }
+            require(exit.all { it >= 0 })
+            require(exit[1] <= 300L)
+            require(exit[0] != 0L || exit[1] == 0L)
             return GuardStatus(
                 parts[0], numbers[0], numbers[1], numbers[2], parts[5],
                 if (parts[0] == "ERROR") parts.getOrNull(6)?.takeIf { it.isNotBlank() } else null,
-                next
+                next, exit[0], exit[1]
             )
         }
     }
