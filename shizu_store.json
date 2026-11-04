@@ -6,22 +6,22 @@
   "target_sdk": 36,
   "short_description": "Enforce deep focus and lock Max Ink reading mode on TCL NXTPAPER devices via Shizuku.",
   "detailed_description": "Analog Anchor companion for TCL NXTPAPER devices.\n\nMake the decision once. Give reading your attention.\n\nFeatures:\n- Pre-commitment durations: 5 minutes default, or 2, 4, 6, 12 hours.\n- Physical switch monitoring: Automatically brings the screen back to Max Ink if switched to Normal early.\n- Friction-backed Emergency Stop: Requires a 5-minute cooldown wait before exit.\n- Fully offline & battery friendly.\n- Powered by Shizuku without requiring root.",
-  "icon_url": "https://raw.githubusercontent.com/anchorminimalism-del/AnalogAnchor_NXTPAPER_E-Ink-Pre-Commitment-Mode/codex/nxtpaper-demo/nxtpaper_guard/app/src/main/res/drawable-nodpi/launcher_art.png",
-  "banner_url": "https://raw.githubusercontent.com/anchorminimalism-del/AnalogAnchor_NXTPAPER_E-Ink-Pre-Commitment-Mode/codex/nxtpaper-demo/nxtpaper_guard/branding/launcher-source.png",
+  "icon_url": "https://raw.githubusercontent.com/arazi-hash/AnalogAnchor_NXTPAPER_E-Ink-Pre-Commitment-Mode/codex/nxtpaper-demo/nxtpaper_guard/app/src/main/res/drawable-nodpi/launcher_art.png",
+  "banner_url": "https://raw.githubusercontent.com/arazi-hash/AnalogAnchor_NXTPAPER_E-Ink-Pre-Commitment-Mode/codex/nxtpaper-demo/nxtpaper_guard/branding/launcher-source.png",
   "app_website": "https://get-analog-anchor.com",
-  "repo_url": "https://github.com/anchorminimalism-del/AnalogAnchor_NXTPAPER_E-Ink-Pre-Commitment-Mode",
+  "repo_url": "https://github.com/arazi-hash/AnalogAnchor_NXTPAPER_E-Ink-Pre-Commitment-Mode",
   "categories": [
     "Utility",
     "Productivity",
     "Tools"
   ],
   "screenshots": [
-    "https://raw.githubusercontent.com/anchorminimalism-del/AnalogAnchor_NXTPAPER_E-Ink-Pre-Commitment-Mode/codex/nxtpaper-demo/current_phone_screen.png",
-    "https://raw.githubusercontent.com/anchorminimalism-del/AnalogAnchor_NXTPAPER_E-Ink-Pre-Commitment-Mode/codex/nxtpaper-demo/current_phone_screen_ar.png"
+    "https://raw.githubusercontent.com/arazi-hash/AnalogAnchor_NXTPAPER_E-Ink-Pre-Commitment-Mode/codex/nxtpaper-demo/current_phone_screen.png",
+    "https://raw.githubusercontent.com/arazi-hash/AnalogAnchor_NXTPAPER_E-Ink-Pre-Commitment-Mode/codex/nxtpaper-demo/current_phone_screen_ar.png"
   ],
   "developer": {
     "name": "Analog Anchor",
-    "account_url": "https://github.com/anchorminimalism-del",
+    "account_url": "https://github.com/arazi-hash",
     "website": "https://get-analog-anchor.com"
   }
 }
