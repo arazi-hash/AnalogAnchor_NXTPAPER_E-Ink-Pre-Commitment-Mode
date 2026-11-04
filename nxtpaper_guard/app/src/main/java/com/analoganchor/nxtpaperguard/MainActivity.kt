@@ -1,13 +1,16 @@
 package com.analoganchor.nxtpaperguard
 
 import android.Manifest
+import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.res.ColorStateList
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.provider.Settings
 import android.view.View
 import android.widget.Button
@@ -139,7 +142,31 @@ class MainActivity : AppCompatActivity() {
             button.setOnClickListener { runAction(GuardRuntime.Action.SET_DURATION, duration) }
         }
 
-        findViewById<TextView>(R.id.tvVersion).text = getString(R.string.version_label, BuildConfig.VERSION_NAME)
+        var versionTapCount = 0
+        var lastVersionTapTime = 0L
+        findViewById<TextView>(R.id.tvVersion).apply {
+            text = getString(R.string.version_label, BuildConfig.VERSION_NAME)
+            setOnClickListener {
+                val now = SystemClock.uptimeMillis()
+                if (now - lastVersionTapTime < 800) {
+                    versionTapCount++
+                    if (versionTapCount >= 5) {
+                        versionTapCount = 0
+                        val tests = findViewById<View>(R.id.layoutTests)
+                        val show = tests.visibility != View.VISIBLE
+                        tests.visibility = if (show) View.VISIBLE else View.GONE
+                        Toast.makeText(
+                            this@MainActivity,
+                            if (show) R.string.diagnostics_unlocked else R.string.hide_mode_tests,
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                } else {
+                    versionTapCount = 1
+                }
+                lastVersionTapTime = now
+            }
+        }
         btnOpenShizuku.setOnClickListener { openShizuku() }
         configureLanguageSelector()
         findViewById<Button>(R.id.btnShizukuHelp).setOnClickListener { showShizukuHelp() }
@@ -170,11 +197,15 @@ class MainActivity : AppCompatActivity() {
         btnTestInk.setOnClickListener { runAction(GuardRuntime.Action.TEST_INK) }
         btnTestNormal.setOnClickListener { runAction(GuardRuntime.Action.TEST_NORMAL) }
         findViewById<Button>(R.id.btnCheckCompatibility).setOnClickListener { showCompatibility() }
-        findViewById<Button>(R.id.btnToggleTests).setOnClickListener { button ->
-            val tests = findViewById<View>(R.id.layoutTests)
-            val show = tests.visibility != View.VISIBLE
-            tests.visibility = if (show) View.VISIBLE else View.GONE
-            (button as Button).setText(if (show) R.string.hide_mode_tests else R.string.show_mode_tests)
+        findViewById<Button>(R.id.btnWebsite).setOnClickListener {
+            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://get-analog-anchor.com")).apply {
+                addCategory(Intent.CATEGORY_BROWSABLE)
+            }
+            try {
+                startActivity(intent)
+            } catch (e: ActivityNotFoundException) {
+                Toast.makeText(this, R.string.website_url, Toast.LENGTH_SHORT).show()
+            }
         }
 
         Shizuku.addRequestPermissionResultListener(permissionListener)

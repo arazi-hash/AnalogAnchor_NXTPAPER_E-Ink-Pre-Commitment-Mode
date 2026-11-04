@@ -60,6 +60,8 @@
     <string name="btn_stop_service">إيقاف للطوارئ</string>
     <string name="btn_retry_service">إعادة المحاولة</string>
     <string name="btn_cancel_resume">إيقاف للطوارئ</string>
+    <string name="btn_website_description">زيارة موقع Analog Anchor الرسمي</string>
+    <string name="diagnostics_unlocked">تم تفعيل أدوات الفحص للمطوّر</string>
     <string name="show_mode_tests">فحص الأوضاع</string>
     <string name="hide_mode_tests">إخفاء الفحص</string>
     <string name="mode_tests_note">أوقف الالتزام قبل اختبار أوضاع الشاشة.</string>
