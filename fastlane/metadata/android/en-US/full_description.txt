@@ -1,3 +1,5 @@
+Just like people hunt for old Pixels for unlimited storage, NXTPAPER phones hide the ultimate digital minimalism secret. This app unlocks the hardware switch for enforced Max Ink pre-commitment and eye-strain-free focus.
+
 Experimental pre-commitment for compatible TCL NXTPAPER phones with native Max Ink. Requires Shizuku and a successful on-device compatibility setup.
 
 Choose five minutes by default, or 2, 4, 6 or 12 hours. Early moves to Normal trigger native Max Ink recovery during a commitment. Emergency Stop waits five minutes or the earlier commitment end, then confirms native Normal restoration. Setup trials have immediate cancellation.

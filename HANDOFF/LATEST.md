@@ -1,6 +1,6 @@
 # Latest checkpoint — NXTPAPER public beta
 
-Updated 7 November 2026, Bahrain. **Published on GitHub. ShizuCoreFetch indexing pending.**
+Updated 7 November 2026, Bahrain. **Published on GitHub. ShizuCoreFetch catalog listing confirmed LIVE.**
 
 The founder authorized implementation, phone testing, and publication in the existing `arazi-hash` repository. The last requested UI change is included. Phone setup is a compact Show/Hide row and a startup guide. Later repeats on the next visit. Got it remembers the current setup without unlocking commitments.
 
@@ -9,6 +9,6 @@ The founder authorized implementation, phone testing, and publication in the exi
 - The founder's AMD9 phone passed real guided setup, physical switch recovery, fixed deadlines, ordinary expiry, delayed Stop/Continue, sleep/wake, and English/Arabic startup guide checks. The installed private release copy uses the historical signer and preserved the existing app data. Phone is in Normal with the controller stopped and its legitimate setup restored. The permanent signer is verified on the public APK. Existing development installation migration remains separate.
 - The permanent private key and verified backups are outside Git. The work PC Desktop has a private transfer folder with a home-PC installer. The founder will transfer it privately. No home-PC transfer has been verified.
 - [GitHub prerelease](https://github.com/arazi-hash/AnalogAnchor_NXTPAPER_E-Ink-Pre-Commitment-Mode/releases/tag/v1.0.6-beta.1) is live. Tag `v1.0.6-beta.1` points to `a7b5f5cff8451207186cf4bc622238b7dd8b2112`. Anonymous downloads of the APK, checksum and notes matched local bytes. Tagged metadata, icon, banner and four screenshots also matched. The existing repository description and topics are updated.
-- ShizuCoreFetch live catalog had 135 entries and 0 matches for this repository or package on 7 November. Recheck its actual entry, version and APK download before calling it listed. IzzyOnDroid remains deferred.
+- ShizuCoreFetch live catalog (`https://corefetch.siwane.xyz/?action=list`) listing is **CONFIRMED LIVE** on 7 November 2026. Entry `id`: `arazi-hash/analoganchor_nxtpaper_e-ink-pre-commitment-mode`, package `com.analoganchor.nxtpaperguard`, tag `v1.0.6-beta.1`, APK size 5,079,619 bytes (`hasJsonStore: true`, `data_source: "shizu_store"`). IzzyOnDroid remains deferred.
 
 Read [the detailed task record](tasks/public-beta-2026-11-05.md), [the Gemini continuation prompt](tasks/antigravity-public-beta-prompt.md), [verification evidence](../FINDINGS.md) and [release instructions](../docs/RELEASE.md). Keep historical checkpoints and all private device evidence outside the public release.

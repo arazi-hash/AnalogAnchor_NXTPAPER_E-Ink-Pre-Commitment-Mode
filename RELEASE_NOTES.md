@@ -1,5 +1,7 @@
 # E-Ink Pre-commitment Mode 1.0.6-beta.1
 
+Just like people hunt for old Pixels for unlimited storage, NXTPAPER phones hide the ultimate digital minimalism secret. This app unlocks the hardware switch for enforced Max Ink pre-commitment and eye-strain-free focus.
+
 Experimental beta for compatible TCL NXTPAPER phones with native Max Ink.
 Shizuku and successful on-device setup are required before commitments.
 
