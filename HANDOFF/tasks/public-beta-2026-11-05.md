@@ -89,3 +89,12 @@ The compact startup guide passed actual English and Arabic UI checks on the fina
 Final frozen source: 276 Python tests in 321.433 seconds, 43 Android tests, zero release lint errors and 19 warnings, successful debug/release builds. Public APK 5,079,619 bytes, SHA256 ab92945d1728891060d7a753f2d7ac448ca0ead5313cf3dd4540f2d5e792c4ac. Exact APK entry equality except signing metadata verified against private acceptance copy SHA256 96db44920c2386930a990bc521a8e3011f2e356f25340e16292d044dd7c76dbb. Four real Fastlane publication captures (EN/AR main and guide) cropped to remove the notification bar. Shizu metadata and artifact checks passed. No supported model beyond AMD9 claimed.
 
 Next: commit reviewed public files, fast-forward the existing branch, publish the genuine prerelease with the final APK/checksum/notes, verify tagged source and real downloads, check actual ShizuCoreFetch catalog listing, and record the final URLs. Keep untracked historical checkpoints private. No release yet at this checkpoint.
+
+
+## Publication result — 7 November 2026
+
+Published genuine GitHub prerelease [v1.0.6-beta.1](https://github.com/arazi-hash/AnalogAnchor_NXTPAPER_E-Ink-Pre-Commitment-Mode/releases/tag/v1.0.6-beta.1) in the existing arazi-hash repository. The tag resolves to `a7b5f5cff8451207186cf4bc622238b7dd8b2112` on the default branch. All three public assets downloaded anonymously and matched the local signed APK, checksum and release notes. Tagged `shizu_store.json`, icon, banner, and four EN/AR images matched source bytes. Only public release material was attached. The repository description and topics reflect the experimental Shizuku/NXTPAPER scope.
+
+ShizuCoreFetch discovery remains pending. Live catalog returned 135 entries and 0 matches for this package/repository. Recheck the real entry, version and download before describing it as listed. The existing GitHub prerelease is available independently. IzzyOnDroid was not submitted.
+
+The phone is in Normal with the controller stopped and prior local setup restored. The founder's installed private release test copy uses the historical signer. The public permanent signing key backup is ready for private transfer from the work PC Desktop. No home-PC transfer was verified.
