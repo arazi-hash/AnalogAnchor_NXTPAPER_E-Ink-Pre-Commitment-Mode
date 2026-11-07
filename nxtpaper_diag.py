@@ -424,13 +424,18 @@ def main(argv=None):
             else:
                 print(f"Compatibility: {report['classification']}")
                 print(f"Profile: {report['profile_id'] or 'unverified build'}")
+                support = report.get("public_support", {})
+                print(f"Public beta: {support.get('level', 'UNSUPPORTED')}; setup: {support.get('setup_state', 'UNAVAILABLE')}")
+                if support.get("reasons"):
+                    print("Compatibility evidence: " + ", ".join(support["reasons"]))
                 for check in report["checks"]:
                     print(f"{check['name']}: {check['status']}" + (f" — {check['detail']}" if check.get("detail") else ""))
                 print(report["recovery_action"])
                 for issue in report["issues"]:
                     print(f"Separate issue: {issue['detail']}")
                 print("Observation only; no phone settings changed and no capture folder was created.")
-            return 0 if report["classification"] == "VERIFIED" else 2
+            eligible = report.get("public_support", {}).get("level") in ("MAINTAINER_TESTED", "EXPERIMENTAL_ELIGIBLE")
+            return 0 if eligible or report["classification"] == "VERIFIED" else 2
         if args.action == "doctor":
             print(f"ADB: {adb.executable}")
             print("Phone connected and authorized.")
@@ -451,6 +456,8 @@ def main(argv=None):
                 "schema": 1, "generated_utc": utc_now(),
                 "classification": "PRIVILEGE_UNAVAILABLE" if connection_failed else "CAPABILITY_MISSING",
                 "profile_id": None, "identity": {},
+                "public_support": {"level": "UNSUPPORTED", "setup_state": "UNAVAILABLE",
+                                   "reasons": ["CONNECTION_OR_REGISTRY_UNAVAILABLE"]},
                 "checks": [{"name": "adb_connection" if connection_failed else "local_profiles",
                             "status": "fail", "detail": "No authorized unique physical phone is available."
                             if connection_failed else "The reviewed local profile could not be loaded."}],

@@ -2,26 +2,48 @@
   "schema_version": 1,
   "app_name": "E-Ink Pre-commitment Mode",
   "package_name": "com.analoganchor.nxtpaperguard",
+  "category": "Productivity",
+  "version_name": "1.0.6-beta.1",
+  "version_code": 7,
   "min_sdk": 26,
   "target_sdk": 36,
-  "short_description": "Enforce deep focus and lock Max Ink reading mode on TCL NXTPAPER devices via Shizuku.",
-  "detailed_description": "Analog Anchor companion for TCL NXTPAPER devices.\n\nMake the decision once. Give reading your attention.\n\nFeatures:\n- Pre-commitment durations: 5 minutes default, or 2, 4, 6, 12 hours.\n- Physical switch monitoring: Automatically brings the screen back to Max Ink if switched to Normal early.\n- Friction-backed Emergency Stop: Requires a 5-minute cooldown wait before exit.\n- Fully offline & battery friendly.\n- Powered by Shizuku without requiring root.",
-  "icon_url": "https://raw.githubusercontent.com/arazi-hash/AnalogAnchor_NXTPAPER_E-Ink-Pre-Commitment-Mode/codex/nxtpaper-demo/nxtpaper_guard/app/src/main/res/drawable-nodpi/launcher_art.png",
-  "banner_url": "https://raw.githubusercontent.com/arazi-hash/AnalogAnchor_NXTPAPER_E-Ink-Pre-Commitment-Mode/codex/nxtpaper-demo/nxtpaper_guard/branding/launcher-source.png",
+  "short_description": "Experimental Max Ink commitments for compatible NXTPAPER phones. Setup required.",
+  "detailed_description": "Experimental pre-commitment for compatible TCL NXTPAPER phones with native Max Ink. Requires Shizuku and a successful on-device compatibility setup.\n\nChoose five minutes by default, or 2, 4, 6 or 12 hours. Early moves to Normal trigger native Max Ink recovery during a commitment. Emergency Stop waits five minutes or the earlier commitment end, then confirms native Normal restoration. Setup trials have immediate cancellation.\n\nThe known reference is the NXTPAPER 70 Pro AMD9 firmware. Other phones and firmware remain experimental and are eligible only when their native slider protocol is recognized. A NXTPAPER button or installation success alone does not establish support. Push/cycle keys and display-only modes are not supported by this adapter.\n\nReboot, lost Shizuku access or controller loss ends enforcement; active commitments are not recovered across those losses. System updates may require setup again. Operation is local. Reports are shared only when you choose to preview and share them.\n\nPrivacy and permissions: https://github.com/arazi-hash/AnalogAnchor_NXTPAPER_E-Ink-Pre-Commitment-Mode/blob/codex/nxtpaper-demo/PRIVACY.md",
+  "developer_message": "Experimental beta. Tested on the TCL NXTPAPER 70 Pro AMD9. Complete guided setup on your phone before relying on commitments.",
+  "icon_url": "https://raw.githubusercontent.com/arazi-hash/AnalogAnchor_NXTPAPER_E-Ink-Pre-Commitment-Mode/v1.0.6-beta.1/nxtpaper_guard/app/src/main/res/drawable-nodpi/launcher_art.png",
+  "banner_url": "https://raw.githubusercontent.com/arazi-hash/AnalogAnchor_NXTPAPER_E-Ink-Pre-Commitment-Mode/v1.0.6-beta.1/nxtpaper_guard/branding/launcher-source.png",
   "app_website": "https://get-analog-anchor.com",
   "repo_url": "https://github.com/arazi-hash/AnalogAnchor_NXTPAPER_E-Ink-Pre-Commitment-Mode",
-  "categories": [
-    "Utility",
-    "Productivity",
-    "Tools"
-  ],
-  "screenshots": [
-    "https://raw.githubusercontent.com/arazi-hash/AnalogAnchor_NXTPAPER_E-Ink-Pre-Commitment-Mode/codex/nxtpaper-demo/current_phone_screen.png",
-    "https://raw.githubusercontent.com/arazi-hash/AnalogAnchor_NXTPAPER_E-Ink-Pre-Commitment-Mode/codex/nxtpaper-demo/current_phone_screen_ar.png"
+  "download_url": "https://github.com/arazi-hash/AnalogAnchor_NXTPAPER_E-Ink-Pre-Commitment-Mode/releases/download/v1.0.6-beta.1/E-Ink-Precommitment-Mode-1.0.6-beta.1.apk",
+  "requires_shizuku": true,
+  "open_source": true,
+  "license": "Apache-2.0",
+  "has_ads": false,
+  "tags": [
+    "shizuku",
+    "nxtpaper",
+    "max-ink",
+    "experimental"
   ],
   "developer": {
     "name": "Analog Anchor",
+    "username": "arazi-hash",
     "account_url": "https://github.com/arazi-hash",
     "website": "https://get-analog-anchor.com"
-  }
+  },
+  "locales": {
+    "ar": {
+      "app_name": "E-Ink Pre-commitment Mode",
+      "category": "الإنتاجية",
+      "short_description": "التزام تجريبي بوضع Max Ink لهواتف NXTPAPER المتوافقة. يلزم فحص الإعداد.",
+      "detailed_description": "نسخة تجريبية للالتزام بالقراءة على هواتف TCL NXTPAPER المتوافقة التي تدعم Max Ink الأصلي. تحتاج Shizuku واجتياز فحص التوافق على الهاتف قبل تشغيل الالتزام.\n\nالمدة الافتراضية خمس دقائق، مع خيارات ساعتين أو أربع أو ست أو اثنتي عشرة ساعة. إذا حرّكت المفتاح إلى العادي أثناء الالتزام، يحاول التطبيق إرجاع Max Ink دون تمديد الوقت. طلب الخروج ينتظر خمس دقائق أو نهاية الالتزام إذا كانت أقرب، ثم يتأكد من العودة إلى الوضع العادي. إلغاء فحص الإعداد فوري ولا يبدأ التزامًا.\n\nالمرجع المعروف هو NXTPAPER 70 Pro بنظام AMD9. بقية الهواتف والإصدارات تبقى تجريبية ولا يمكن فحصها إلا إذا تعرّف التطبيق على بروتوكول المفتاح. وجود زر NXTPAPER وحده لا يؤكد التوافق.\n\nإعادة التشغيل أو توقف Shizuku أو المتحكّم ينهي الحماية الحالية. يعمل المتحكّم محليًا، ولا تُرسل التقارير إلا إذا اخترت معاينتها ومشاركتها.",
+      "developer_message": "نسخة تجريبية. اجتز فحص الهاتف وراجع قائمة الأجهزة المختبرة قبل الاعتماد على الحماية."
+    }
+  },
+  "screenshots": [
+    "https://raw.githubusercontent.com/arazi-hash/AnalogAnchor_NXTPAPER_E-Ink-Pre-Commitment-Mode/v1.0.6-beta.1/fastlane/metadata/android/en-US/images/phoneScreenshots/01-main.png",
+    "https://raw.githubusercontent.com/arazi-hash/AnalogAnchor_NXTPAPER_E-Ink-Pre-Commitment-Mode/v1.0.6-beta.1/fastlane/metadata/android/en-US/images/phoneScreenshots/02-setup-guide.png",
+    "https://raw.githubusercontent.com/arazi-hash/AnalogAnchor_NXTPAPER_E-Ink-Pre-Commitment-Mode/v1.0.6-beta.1/fastlane/metadata/android/ar/images/phoneScreenshots/01-main.png",
+    "https://raw.githubusercontent.com/arazi-hash/AnalogAnchor_NXTPAPER_E-Ink-Pre-Commitment-Mode/v1.0.6-beta.1/fastlane/metadata/android/ar/images/phoneScreenshots/02-setup-guide.png"
+  ]
 }

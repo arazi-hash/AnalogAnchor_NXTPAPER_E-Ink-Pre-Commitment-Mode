@@ -1,0 +1,11 @@
+E-Ink Pre-commitment Mode
+Copyright 2026 Analog Anchor contributors
+
+Project source is licensed under Apache License 2.0. The license does not grant
+rights to use TCL's trademarks or imply TCL endorsement. TCL system software
+and private device investigation artifacts are not distributed as project code.
+
+Runtime libraries include AndroidX Core/AppCompat and related AndroidX modules,
+Google Material Components for Android, and the Shizuku API/provider. Retain the
+licenses and notices packaged by these dependencies. See THIRD_PARTY_NOTICES.md
+for upstream source references and applicable licenses.

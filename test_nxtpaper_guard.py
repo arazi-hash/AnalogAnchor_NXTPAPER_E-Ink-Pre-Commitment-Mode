@@ -34,6 +34,13 @@ def find_shell():
 SHELL = find_shell()
 PRELUDE = r'''
 PATH=/usr/bin:/bin:$PATH
+# The small Git for Windows shell lacks sha256sum. Keep the real digest
+# algorithm for host tests; Android supplies its own toybox sha256sum.
+if ! command -v sha256sum >/dev/null 2>&1; then
+  sha256sum() {
+    python -c 'import hashlib,sys; data=open(sys.argv[1],"rb").read() if len(sys.argv)>1 else sys.stdin.buffer.read(); print(hashlib.sha256(data).hexdigest()+"  "+(sys.argv[1] if len(sys.argv)>1 else "-"))' "$@"
+  }
+fi
 export NXTPAPER_GUARD_SOURCE_ONLY=1
 . "$1"
 NXTPAPER_PROFILE_DATA=$(cat "$2")
@@ -56,6 +63,10 @@ DURATION_COMMAND_LOCK=$BASE.duration.command.lock
 STOP_REQUEST=$BASE.stop.request
 STOP_ACK=$BASE.stop.ack
 STOP_COMMAND_LOCK=$BASE.stop.command.lock
+QUALIFICATION_FILE=$BASE.qualification
+OPERATION_LOCK=$BASE.operation.lock
+SETUP_PID_FILE=$GUARD_TEST_DIR/setup.pid
+SETUP_LOCK_DIR=$GUARD_TEST_DIR/setup.lock
 KEYLAYOUT_PATH=$GUARD_TEST_DIR/Generic.kl
 mkdir -p "$LOCK_DIR"
 printf 'key 592 TSWT_ON\nkey 593 TSWT_OFF\n' > "$KEYLAYOUT_PATH"

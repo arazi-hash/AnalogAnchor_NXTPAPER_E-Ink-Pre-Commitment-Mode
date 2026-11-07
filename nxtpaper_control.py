@@ -1,7 +1,7 @@
-"""Firmware-pinned native TCL controls and a raw physical-slider monitor.
+"""Locally qualified TCL slider controls and a raw physical-switch monitor.
 
-Only keyevents 343/344 change phone mode. The physical monitor reads kernel
-events, so those framework injections cannot pretend that the slider moved.
+Commands use a frozen runtime binding and recheck it before every native
+transition. Kernel events distinguish physical movements from injected keys.
 """
 
 from __future__ import annotations
@@ -17,8 +17,8 @@ import time
 
 from nxtpaper_diag import Adb, DiagnosticError, connect, find_adb
 from nxtpaper_compatibility import (
-    CompatibilityError, discover_switch, load_profile, read_native_state,
-    validate_keylayout,
+    CompatibilityError, active_keylayout, assess_support, discover_switch,
+    load_profile, read_native_state, validate_keylayout,
 )
 
 
@@ -130,24 +130,27 @@ class TclAdapter:
         # Freeze reviewed data for this adapter's lifetime. A file edited while
         # a commitment is active cannot silently alter its commands.
         self.profile = FIRMWARE_PROFILE
+        self._binding_digest = None
 
     def validate(self):
-        """Verify this handset profile and its existing native Max Ink preset."""
+        """Check local setup and freeze this exact phone/build/adapter binding."""
         self._validated = False
         _require_physical(self.adb)
-        profile = {}
-        for name, (property_name, expected) in PROFILE_PROPERTIES.items():
-            actual = _checked_read(self.adb, ("shell", "getprop", property_name)).strip()
-            if actual != expected:
-                raise DiagnosticError(f"Unsupported TCL firmware/profile: {name}={actual!r}; expected {expected!r}.")
-            profile[name] = actual
-        values = _required_settings(
-            _checked_read(self.adb, ("shell", "settings", "list", "secure")),
-            {MODE_PRESET_KEY, IMMEDIATE_SWITCH_KEY},
-        )
-        _validate_presets(values)
+        assessment = assess_support(self.adb)
+        if assessment.binding is None:
+            reasons = ", ".join(assessment.reasons)
+            raise DiagnosticError("Unsupported TCL firmware/profile or required controls unavailable: " + reasons)
+        if assessment.setup_state != "PASSED":
+            raise DiagnosticError("Complete guided compatibility setup in the phone app before using PC mode controls "
+                                  f"(setup {assessment.setup_state.lower()}). No native command was sent.")
+        binding = assessment.binding
+        if self._binding_digest is not None and self._binding_digest != binding.digest:
+            raise DiagnosticError("The phone build, input mapping, native components or adapter changed during this session. "
+                                  "The frozen controller binding cannot be replaced; use native manual recovery.")
+        self.profile = binding
+        self._binding_digest = binding.digest
         self._validated = True
-        return profile
+        return {**binding.identity, "android_version": binding["android"]}
 
     def read_state(self, *, check_configuration=True):
         _require_physical(self.adb)
@@ -167,8 +170,6 @@ class TclAdapter:
         self.validate()
         if _checked_read(self.adb, ("shell", "id", "-u")).strip() != "2000":
             raise DiagnosticError("Shell privilege unavailable; no native mode command was sent.")
-        discover_switch_node(_checked_read(self.adb, ("shell", "getevent", "-lp")))
-        validate_switch_keylayout(_checked_read(self.adb, ("shell", "cat", KEYLAYOUT_PATH)))
         if key not in (int(self.profile["enter_key"]), int(self.profile["exit_key"])):
             raise DiagnosticError("Unreviewed native command refused.")
         state = self.read_state()
@@ -177,10 +178,10 @@ class TclAdapter:
         _checked_read(self.adb, ("shell", "input", "keyevent", str(key)))
 
     def enter_max_ink(self):
-        self._keyevent(KEY_ENTER_MAX_INK)
+        self._keyevent(int(self.profile["enter_key"]))
 
     def restore_normal(self):
-        self._keyevent(KEY_RESTORE_NORMAL)
+        self._keyevent(int(self.profile["exit_key"]))
 
 
 def discover_switch_node(capabilities):
@@ -229,7 +230,11 @@ class PhysicalSwitchMonitor:
         _require_physical(self.adb)
         capabilities = _checked_read(self.adb, ("shell", "getevent", "-lp"))
         self.device_path = discover_switch_node(capabilities)
-        layout = _checked_read(self.adb, ("shell", "cat", KEYLAYOUT_PATH))
+        try:
+            layout_path = active_keylayout(_checked_read(self.adb, ("shell", "dumpsys", "input")), self.device_path)
+        except CompatibilityError as error:
+            raise DiagnosticError(str(error)) from error
+        layout = _checked_read(self.adb, ("shell", "cat", layout_path))
         validate_switch_keylayout(layout)
         try:
             if self.output_folder is not None:

@@ -1,5 +1,91 @@
 # Verified NXTPAPER controls
 
+## Public beta controller acceptance — 7 November 2026, 1.0.6-beta.1 / code 7
+
+The TCL NXTPAPER 70 Pro **T807D / Frida, Android 16 AMD9** is now the physically
+tested reference for the public beta controller and guided qualification flow.
+Other phones/builds remain experimental candidates only when the reviewed
+persistent ON/OFF slider protocol is recognized. A NXTPAPER button alone does not
+establish support. See [the compatibility list](docs/COMPATIBILITY.md).
+
+### Phone results actually recorded
+
+| Check | Recorded result |
+| --- | --- |
+| Guided physical proof | Genuine Normal → native Max Ink → Normal movements were observed through raw switch events. The owner confirmed the full native reading environment and expected app restrictions. |
+| Guided software trial | Software exit restored Normal with the physical switch still in Ink. With the switch subsequently in Normal, automatic Max Ink entry and Normal restoration passed. Final settled Normal and the owner's confirmation were required before qualification. |
+| Activity closure/reopening | Native Max Ink hid the app. Reopening it after returning to Normal recovered the independent trial's progress. |
+| Unsuccessful setup | A timed-out attempt remained incomplete and did not unlock commitments. A later complete trial qualified the exact phone/build. |
+| Default commitment | The confirmed session ran for exactly 300 seconds between its original start and deadline. Genuine physical early exit triggered native Max Ink recovery in about 16 seconds without moving that deadline. |
+| Ordinary expiry | With the physical switch in Ink, expiry entered extended reading. A later physical move to Normal restored Normal and it stayed there. |
+| Optional duration | The two-hour preset was selected in the app and became a 7,200-second session. Consuming it reset the next-session choice to 300 seconds. The two-hour session was ended through the Stop test below; sustained two-hour use was not tested. |
+| Stop and Continue | Repeated Stop requests retained the same exit deadline. Continue cancelled the exit request without extending the original commitment. These active-session transactions used the real controller protocol from the PC, rather than the on-screen buttons while native Max Ink restricted the app. |
+| Full delayed Stop | A fresh Stop request on the two-hour session set a deadline exactly 300 seconds later. Restoration began on the next controller tick after that deadline; Normal settled about eight seconds after the native exit command, with the physical switch still in Ink. |
+| Sleep/wake | A brief screen-off/wake trial during the pending Stop preserved both the commitment and exit deadlines; the remaining time decreased. This is not a sustained deep-sleep or long-duration battery test. |
+
+The owner confirmed that Normal was usable and returned the physical switch to
+Normal. The known test controller was stopped and the app's enable preference was
+turned off. Stock firmware, personal app data and TCL's native selected-app
+configuration were preserved. No OTA, root/reset/flashing or updater-package
+restriction was performed.
+
+### Signing and artifact evidence boundary
+
+Phone trials used a **non-debuggable private release acceptance copy** signed with
+the installation's historical certificate, preserving its data. For the tested
+build, every APK ZIP entry except signature metadata was compared byte-for-byte
+with the corresponding public release APK. The public release uses the new
+permanent certificate
+`434a6ec4f84e1720f8f05e826fe2ccc0d148c47df73e561eac02d1b6f0845202`.
+That permanent signing identity was not installed on the founder's phone; its
+migration remains separate. The private acceptance copy and recovery material
+must never be public release assets. See [release/signing instructions](docs/RELEASE.md).
+
+The exact reviewed AMD9 identity resolves TSWT keys to `343/344`, while its reverse
+name table reports `KEYCODE_FP_LIFT_UP/KEYCODE_FP_LONGPRESS`. Only that precise
+pair on the exact reviewed identity is accepted as a vendor alias. Unfamiliar
+builds cannot inherit this exception or guessed numeric keys.
+
+### Final beta verification
+
+- Full Python discovery: **276 passed**, zero failures/skips, **321.433 seconds**.
+- Android unit suite: **43 passed**. Release lint reported **zero errors and 19
+  warnings**. Debug and release APK builds completed successfully.
+- The public APK is **5,079,619 bytes**, SHA256
+  `ab92945d1728891060d7a753f2d7ac448ca0ead5313cf3dd4540f2d5e792c4ac`.
+  The APK is non-debuggable, reports version `1.0.6-beta.1` / code `7`, and
+  bundles the verified controller and registry bytes. The phone UI acceptance
+  copy is identical apart from signing metadata, SHA256
+  `96db44920c2386930a990bc521a8e3011f2e356f25340e16292d044dd7c76dbb`.
+- A read-only execution in the actual Android shell caught and corrected an awk
+  parser difference; the schema2 preflight then returned
+  `VERIFIED:t807d-eea-amd9` with empty stderr.
+- Phone UI checks passed for the English and Arabic startup guide, next-visit
+  reminder after Later, suppression after Got it, manual reopening, Show/Hide,
+  configuration recreation, and disabled Start during incomplete setup. The
+  owner's prior qualification and preferences were restored. Publication images
+  are real phone captures with the notification bar cropped out.
+- Setup now preserves Cancel requests made during startup and attempts bounded
+  restoration after an uncertain command result. These failure paths have host
+  regression coverage. The physical timing tests above used the same commitment
+  controller before these setup-only recovery refinements.
+
+Private evidence is under ignored `logs/public-beta-device-2026-11-07/`, including
+the default-session and Stop watches, Stop/Continue transactions and sleep/wake
+comparison. Raw captures and app selections are not public diagnostics. The
+[active task](HANDOFF/tasks/public-beta-2026-11-05.md) and
+[latest checkpoint](HANDOFF/LATEST.md) record publication status separately.
+
+No other phone model, sustained 2/4/6/12-hour run, real OTA, reboot recovery,
+USB-loss behavior or forced active-controller crash was physically accepted in
+this beta trial. Missing privileges, stale qualification, ambiguous controls,
+Cancel and unknown-controller preservation also have host regression coverage;
+those mocked cases are not additional handset trials.
+
+The dated sections below are preserved historical snapshots. Their old test
+counts, artifact identities and statements about installation apply to those
+specific updates, not to the beta evidence above.
+
 ## Firmware resilience — 28 October 2026, local 1.0.5 / code 6
 
 The local successor adds one strict reviewed data-only AMD9 profile shared with PC tools and bundled in the Android APK. Unknown firmware remains unverified; changing/removing a fingerprint is not qualification. The diagnostic registry can compare additional profiles, but the current Android build and PC control adapter select the single AMD9 profile. A new native protocol requires reviewed adapter code/evidence.

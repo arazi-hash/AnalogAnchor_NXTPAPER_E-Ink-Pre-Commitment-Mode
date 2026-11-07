@@ -10,6 +10,7 @@ import unittest
 from unittest.mock import patch
 
 import nxtpaper_control as control
+import nxtpaper_compatibility as compatibility
 from nxtpaper_diag import Adb, DiagnosticError, Result
 
 
@@ -56,8 +57,22 @@ class FakeAdb(Adb):
             ("shell", "settings", "list", "secure"): captured(NORMAL_SETTINGS),
             ("shell", "getevent", "-lp"): captured(CAPABILITIES),
             ("shell", "cat", control.KEYLAYOUT_PATH): captured(KEYLAYOUT),
+            ("shell", "getprop", "ro.product.manufacturer"): captured("TCL"),
+            ("shell", "getprop", "sys.tct.support_ui_switch_button"): captured(),
+            ("shell", "pm", "list", "features"): captured("feature:vendor.software.support.tcl_switch\nfeature:android.hardware.telephony\n"),
+            ("shell", "test", "-r", "/dev/input/event9"): captured(),
+            ("shell", "dumpsys", "input"): captured("    5: tswt\n      Path: /dev/input/event9\n      KeyLayoutFile: /system/usr/keylayout/Generic.kl\n"),
+            ("shell", "sha256sum", control.KEYLAYOUT_PATH): captured("a" * 64 + "  " + control.KEYLAYOUT_PATH),
         })
+        for package in ("com.android.systemui", "com.tcl.android.launcher", "com.tct.onetouchbooster"):
+            self.responses[("shell", "dumpsys", "package", package)] = captured("versionCode=123")
+        assessment = compatibility.assess_support(self)
+        assert assessment.binding is not None
+        self.responses[("shell", "cat", "/data/local/tmp/nxtpaper_guard.qualification")] = captured(
+            "schema=1\nbinding_sha256=" + assessment.binding.digest + "\ncontroller_sha256=" +
+            assessment.binding["controller_sha256"] + "\ntrial_id=123-45-6\nowner_confirmed=1\nresult=passed\n")
         self.responses.update(overrides or {})
+        self.calls.clear()
 
     def read(self, args, timeout=20):
         self.calls.append((tuple(args), timeout))
@@ -68,13 +83,52 @@ class FakeAdb(Adb):
 
 
 class AdapterTests(unittest.TestCase):
+    def qualify(self, adb):
+        result = compatibility.assess_support(adb)
+        self.assertIsNotNone(result.binding)
+        adb.responses[("shell", "cat", "/data/local/tmp/nxtpaper_guard.qualification")] = captured(
+            "schema=1\nbinding_sha256=" + result.binding.digest + "\ncontroller_sha256=" +
+            result.binding["controller_sha256"] + "\ntrial_id=123-45-6\nowner_confirmed=1\nresult=passed\n")
+
+    def test_known_phone_cannot_send_commands_without_successful_local_setup(self):
+        adb = FakeAdb({("shell", "cat", "/data/local/tmp/nxtpaper_guard.qualification"): captured()})
+        with self.assertRaisesRegex(DiagnosticError, "guided compatibility setup"):
+            control.TclAdapter(adb).validate()
+        self.assertFalse(any(command[:2] == ("shell", "input") for command, _ in adb.calls))
+
+    def test_new_local_qualification_cannot_swap_adapter_binding_during_active_session(self):
+        adb = FakeAdb()
+        adapter = control.TclAdapter(adb)
+        adapter.validate()
+        adb.responses[("shell", "dumpsys", "package", "com.android.systemui")] = captured("versionCode=124")
+        self.qualify(adb)
+        with self.assertRaisesRegex(DiagnosticError, "frozen controller binding"):
+            adapter.restore_normal()
+        self.assertFalse(any(command[:2] == ("shell", "input") for command, _ in adb.calls))
+
+    def test_experimental_phone_uses_its_qualified_runtime_keys(self):
+        adb = FakeAdb()
+        adb.responses[("shell", "getprop", "ro.build.fingerprint")] = captured("TCL/Other/Phone:16/BUILD/NEW:user/release-keys")
+        apk_path = "/data/app/~~abc/pkg==/base.apk"
+        adb.responses[("shell", "pm", "path", "com.analoganchor.nxtpaperguard")] = captured("package:" + apk_path)
+        adb.responses[("shell", "env", "CLASSPATH=" + apk_path, "app_process", "/",
+                       "com.analoganchor.nxtpaperguard.KeySymbolProbe")] = captured(
+            "symbol_on=KEYCODE_TSWT_ON\nenter_key=400\nresolved_on=KEYCODE_TSWT_ON\n"
+            "symbol_off=KEYCODE_TSWT_OFF\nexit_key=401\nresolved_off=KEYCODE_TSWT_OFF\n")
+        self.qualify(adb)
+        adapter = control.TclAdapter(adb)
+        adapter.validate()
+        adapter.enter_max_ink()
+        adapter.restore_normal()
+        self.assertEqual([command for command, _ in adb.calls if command[:2] == ("shell", "input")],
+                         [("shell", "input", "keyevent", "400"), ("shell", "input", "keyevent", "401")])
+
     def test_profile_and_presets_are_verified_without_writes(self):
         adb = FakeAdb()
         profile = control.TclAdapter(adb).validate()
         self.assertEqual(profile["model"], "T807D")
         self.assertEqual(profile["fingerprint"], control.SUPPORTED_FINGERPRINT)
-        self.assertTrue(all(command[:2] in (("shell", "getprop"), ("shell", "settings"))
-                            for command, _ in adb.calls))
+        self.assertFalse(any(command[:2] == ("shell", "input") for command, _ in adb.calls))
 
     def test_wrong_model_android_sdk_or_build_is_rejected(self):
         for name, (prop, _) in control.PROFILE_PROPERTIES.items():
@@ -90,13 +144,13 @@ class AdapterTests(unittest.TestCase):
         with self.assertRaisesRegex(DiagnosticError, "Native switch configuration"):
             adapter.read_state()
         self.assertTrue(adapter.read_state(check_configuration=False).normal)
-        with self.assertRaisesRegex(DiagnosticError, "Native switch configuration"):
+        with self.assertRaisesRegex(DiagnosticError, "Unsupported TCL firmware/profile"):
             adapter.restore_normal()
         self.assertFalse(any(command[:2] == ("shell", "input") for command, _ in adb.calls))
 
     def test_immediate_switch_guard_is_enforced(self):
         changed = NORMAL_SETTINGS.replace("tct_nxtpaper_switch_imm=1", "tct_nxtpaper_switch_imm=0")
-        with self.assertRaisesRegex(DiagnosticError, "Native switch configuration"):
+        with self.assertRaisesRegex(DiagnosticError, "Unsupported TCL firmware/profile"):
             control.TclAdapter(FakeAdb({("shell", "settings", "list", "secure"): captured(changed)})).validate()
 
     def test_key_controls_require_validation_and_send_only_exact_native_events(self):
@@ -113,7 +167,7 @@ class AdapterTests(unittest.TestCase):
         self.assertEqual(injected, [(("shell", "input", "keyevent", "343"), 3),
                                    (("shell", "input", "keyevent", "344"), 3)])
         self.assertEqual(sum(command[:2] == ("shell", "getprop") for command, _ in adb.calls),
-                         2 * len(control.PROFILE_PROPERTIES))
+                         2 * (len(control.PROFILE_PROPERTIES) + 2))
         self.assertEqual(sum(command == ("shell", "getevent", "-lp") for command, _ in adb.calls), 2)
         self.assertEqual(adb.command(injected[0][0]),
                          [r"C:\Program Files\Android\adb.exe", "-s", "TCL-USB", "shell", "input", "keyevent", "343"])
@@ -217,7 +271,9 @@ class SwitchParserTests(unittest.TestCase):
 
     def test_real_keylayout_polarity_is_required(self):
         control.validate_switch_keylayout(KEYLAYOUT)
-        control.validate_switch_keylayout("key 592 TSWT_ON WAKE # comment\nkey 593 TSWT_OFF\n")
+        control.validate_switch_keylayout("key 592 TSWT_ON # comment\nkey 593 TSWT_OFF\n")
+        with self.assertRaises(DiagnosticError):
+            control.validate_switch_keylayout("key 592 TSWT_ON WAKE # comment\nkey 593 TSWT_OFF\n")
         for text in (KEYLAYOUT.replace("TSWT_ON", "OTHER"),
                      "key 592 TSWT_OFF\nkey 593 TSWT_ON\n", KEYLAYOUT + "key 592 TSWT_ON\n"):
             with self.subTest(text=text), self.assertRaises(DiagnosticError):

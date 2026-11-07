@@ -1,62 +1,64 @@
 # E-Ink Pre-commitment Mode
 
-## Firmware updates and recovery
+**Designed for compatible TCL NXTPAPER phones with native Max Ink; compatibility testing is required.**
 
-The local **1.0.5 / code 6** adds a shared reviewed firmware profile, independent read-only compatibility checks, and fresh validation before native mode commands. It supports the qualified AMD9 firmware; it does not automatically qualify future TCL releases. The app's **Check system compatibility** action is under the mode-test section and can explain an unsupported build or missing Shizuku access without deploying a controller. Its result does not prove physical switch operation or live enforcement.
+Version `1.0.6-beta.1` / code `7` is being prepared as an experimental public beta. The tested reference is the TCL NXTPAPER 70 Pro T807D/Frida, Android 16 AMD9 slider protocol. Other eligible phones and system builds must pass setup on that exact phone; a NXTPAPER button alone does not establish support. Push/cycle buttons need a separate reviewed adapter. See [compatibility and evidence](docs/COMPATIBILITY.md).
 
-From the project folder, `python nxtpaper_diag.py compatibility --json` prints a shareable report without changing the phone or saving files. If more than one ADB endpoint is connected, use the global `--serial` selector before `compatibility`; select the intended handset explicitly. Keep private captures out of Git.
+## App setup
 
-Read [the seven-approach plan](HANDOFF/tasks/firmware-resilience-plan-2026-10-28.md), [the recovery guide](compatibility/RECOVERY.md), and [the copyable Antigravity prompt](HANDOFF/tasks/antigravity-firmware-resilience-prompt.md). The [current task](HANDOFF/tasks/firmware-resilience-2026-10-28.md) owns actual verification and artifact status. Updater restrictions have not been applied. APK/source archives are not firmware rollback images.
+1. Install the [GitHub beta](https://github.com/arazi-hash/AnalogAnchor_NXTPAPER_E-Ink-Pre-Commitment-Mode/releases/tag/v1.0.6-beta.1), start official Shizuku, and grant access to this app.
+2. Open the **Phone setup** controls. Read the experimental status and native recovery instructions. Checks inspect the phone before sending any mode commands. An existing live or uncertain controller must be resolved safely before setup can run.
+3. Follow the genuine physical Normal → Max Ink → Normal test. Confirm that TCL's full native reading environment and selected-app restrictions appeared.
+4. Follow the bounded software entry, re-entry and restoration test. It runs independently of the activity, so the native launcher hiding the app does not erase progress. **Cancel test** immediately attempts restoration; it never starts a commitment or a five-minute Stop wait.
+5. Enable commitments only after all required checks pass and Normal restoration is confirmed.
 
-## Standalone Android app (local 1.0.5 / code 6)
+Five minutes remains the default commitment; optional durations are 2, 4, 6 or 12 hours. Physical early exit during a commitment triggers native Max Ink recovery without renewing the deadline. Emergency Stop waits five minutes or the earlier commitment deadline; **Continue commitment** cancels the exit request without extending the session. Ordinary expiry permits extended reading until you move the switch to Normal.
 
-The Android app in `nxtpaper_guard/` uses Shizuku to run its bundled controller on the phone. Starting the guard deploys the controller and verifies its live process and input monitor. This is a personal test build for the TCL NXTPAPER 70 Pro firmware described in [FINDINGS.md](FINDINGS.md). Version **1.0.4 / code 5** added delayed Emergency Stop; **1.0.5 / code 6** adds compatibility safeguards. The 28 October read-only inspection found the 1.0.4 APK installed with its matching bundled asset, while a different older live controller identified as 1.0.3. Package presence does not verify delayed-stop handset behavior. The 1.0.5 APK has not been installed or physically accepted. The historical **1.0.3 / code 4** installation had source, APK asset, and live controller verified byte-for-byte equal. Its first physical Ink event started the default five-minute session; expiry kept Ink active until a physical Normal movement restored normal mode. Five consecutive physical early-exit recoveries and immediate Stop passed on the preceding controller. Those trials do not verify the new delayed exit or compatibility build; repeated recoveries and sustained hours remain pending.
+On 7 November 2026, the founder's AMD9 phone passed the guided native trial,
+physical early-exit recovery, ordinary five-minute expiry, actual delayed Stop /
+Continue controller transactions and brief sleep/wake checks. Those trials used
+a non-debuggable release acceptance copy signed for the existing installation;
+its contents matched the corresponding public APK except for signing metadata.
+The startup guide explains setup when it is required. **Later** brings the guide
+back on the next visit. **Got it** remembers the acknowledgement for the current
+setup. Use **Phone setup → Show** to reopen the guide or run the test.
+See [the recorded results and limits](FINDINGS.md).
 
-1. Remove magnetic cases and holders before testing the physical switch or troubleshooting pairing. TCL warns that magnets near the NXTPAPER key can interfere with it. [TCL's official guidance](https://www.tcl.com/global/en/support-mobile/faq/q1770346246101540)
-2. Install the updated APK, start the official Shizuku app, and grant this app Shizuku permission when requested.
-3. Start the guard. The default commitment is **five minutes**. Optional **2, 4, 6, or 12 hour** buttons select the next session only.
-4. Move the physical switch to **Ink**. The first fresh physical Ink event starts entry; there is no three-move calibration. If the switch was already in Ink when the guard started, move it to Normal, let the native transition finish, then move it to Ink.
-5. The selected duration is consumed when entry starts, and the next-session setting returns to five minutes. The active duration stays fixed. The countdown begins only after native Max Ink is fully confirmed.
-6. During the commitment, an attempt to return to Normal triggers native Ink recovery without restarting the deadline. Measured physical recovery took **15–19 seconds**; allow around 20 seconds for the native transition rather than expecting an immediate screen change.
-7. After the commitment ends, leaving the physical switch in Ink keeps reading open. Move it to Normal when finished. The controller's injected commands do not count as physical switch movements.
-8. **Emergency Stop** starts a **five-minute wait** during entry or an active commitment, including the short five-minute commitment. Protection stays active. If the original commitment finishes sooner, restoration starts then. Repeated requests keep the same exit deadline. **Continue commitment** cancels the exit request without changing the original commitment timer; a later exit request starts a fresh wait. At zero, wait for **Normal mode** to be confirmed. Native restoration takes additional transition time. Stopping idle monitoring leaves the native mode unchanged; stopping after a completed commitment begins restoration immediately. A completed Stop, an error, or reboot resets the optional duration to five minutes.
+If Max Ink closes the app screen, reopen it to inspect progress. Screen color alone is not proof of the physical switch position. Native transitions can take several seconds. Remove magnetic cases/holders when investigating missing switch events; [TCL's guidance](https://www.tcl.com/global/en/support-mobile/faq/q1770346246101540) describes magnetic interference near the NXTPAPER key.
 
-The compact Arabic and English screen keeps the app name **E-Ink Pre-commitment Mode** in both languages, with the language button at the bottom showing the other language. It shows the commitment, optional durations, and concise guard/Shizuku/switch status. Contextual help replaces repeated reassurance text; there are no marketing or support blocks. Android status-bar, navigation-bar, and cutout insets remain respected.
+## System updates and recovery
 
-During an exit request, the main timer shows **Stopping in…** and the original commitment timer remains visible below it. The shell controller owns both timers using phone uptime, so closing the app, changing language, screen sleep, or changing the wall clock does not reset them while that controller remains alive. An exit request disables future automatic restart without stopping the current protection. Confirmed cancellation restores the restart preference. A cancelled exit never renews the original commitment.
+Setup is local and bound to the tested build, adapter revision, runtime key mapping, active layout and relevant native component versions. Relevant changes invalidate that result and require fresh checks/setup. A cached success never overrides missing Shizuku access or changed controls. No executable profiles are downloaded, and no updater packages are automatically disabled.
 
-An APK/controller version mismatch displays an update warning and leaves the existing live controller running. Complete or stop the older controller before updating; the new app does not terminate an unknown live commitment to replace its controller. The PC demonstration's operator stop remains unchanged.
+Reboot, lost privileges or controller loss ends enforcement. An old commitment is not recovered by restarting the app. After reboot, restart Shizuku and verify the live controller before relying on protection. With no Wi-Fi, use the trusted USB helper `START_SHIZUKU_USB.cmd`; stock unrooted phones cannot be promised automatic Shizuku startup offline.
 
-Physical switch position comes from raw input events. `TSWT_state` is a native software setting and is not proof of the physical position. TCL can report `TSWT_state=-1` at boot; the guard now treats that exact value as unknown and waits for a usable native snapshot without sending mode commands or guessing the switch position. The 1.0.2 first-Ink defect and this boot-state rejection were confirmed during investigation. The updated behavior still needs the repeated live trials listed in [FINDINGS.md](FINDINGS.md).
+For manual recovery, use TCL's physical switch: move to Ink, then back to Normal and let the native transition finish. Never flash/reset or uninstall as routine troubleshooting. Read [recovery precautions](compatibility/RECOVERY.md) and [the original seven approaches](HANDOFF/tasks/firmware-resilience-plan-2026-10-28.md).
 
-### Reboot, a different Wi-Fi network, or no Wi-Fi
+Preview a compatibility report before choosing to share it. Reports omit serials, selected app names, unrelated settings and process tokens. The app does not request INTERNET permission or upload reports in the background. See [privacy and permissions](PRIVACY.md).
 
-The guard runs locally and needs no internet connection once running. Reboot ends the shell process, including a pending exit countdown. Active commitments and pending exits are not recovered across controller loss or reboot. A saved enable preference is a request to resume protection; it is not evidence that protection survived a reboot. The app verifies live process identity and a fresh heartbeat before displaying the guard as running.
+## Build and release
 
-For easier startup, use [official Shizuku 13.6 or newer](https://github.com/RikkaApps/Shizuku/releases/tag/v13.6.0). On this Android 16 phone, its **Start on boot** setting can start Shizuku when connected to a trusted Wi-Fi network. In Android's per-network debugging dialog, choose **Always allow on this network** only for a network you trust. Moving to another network may require accepting its debugging dialog; that is separate from pairing Shizuku, which normally only needs to be done once. Automatic startup remains dependent on the phone's firmware and debugging service availability.
-
-If Shizuku is unavailable, the app shows a recovery action. When previously enabled, the guard attempts to resume when an authorized Shizuku binder is delivered. Opening the app after starting Shizuku provides a recovery path. Optional notification permission allows a reminder after boot; declining it does not prevent the guard from running.
-
-With **no Wi-Fi after a cold boot**, a stock unrooted phone cannot be promised automatic Shizuku startup. Use USB debugging and a trusted computer to start Shizuku, then return to the app. On either Windows PC, double-click `START_SHIZUKU_USB.cmd`; it resolves the installed official launcher and has a fallback for older Shizuku. Manual recovery uses the phone's native NXTPAPER controls. Magnetic accessories should be removed before assessing a missing physical switch event; a real Ink event and controlled entry were observed after removal, while repeated switching remains under investigation. Losing shell privilege or an OEM killing the process means commitment enforcement is unavailable; this build does not claim immunity from Android process management.
-
-### Build on either PC
-
-Use JDK 17 and Android SDK platform 36 / build-tools 36.0.0. Keep each PC's SDK path in an ignored `nxtpaper_guard/local.properties`, for example `sdk.dir=C:/Users/YOUR_USER/AppData/Local/Android/Sdk`. Then run:
+Use JDK 17, Android SDK platform36/build-tools36.0.0 and each PC's ignored `nxtpaper_guard/local.properties`. From `nxtpaper_guard`:
 
 ```powershell
-cd nxtpaper_guard
 .\gradlew.bat testDebugUnitTest lintDebug assembleDebug --max-workers=1 --no-parallel --console=plain
 ```
 
-The Gradle output is `nxtpaper_guard/app/build/outputs/apk/debug/app-debug.apk`; the compatibility deliverable is `dist/E-Ink-Precommitment-Mode-1.0.5-firmware-resilience.apk`. Preserve the historical 1.0.4 delayed-stop and 1.0.3 APKs. Verification, sizes, hashes, and debug certificates are recorded separately in [FINDINGS.md](FINDINGS.md). `packageGuardController` copies canonical `nxtpaper_guard.sh` and `compatibility/profiles/t807d-eea-amd9.properties` into the APK assets. Controller identity hashes both files with a NUL separator. Generated outputs, SDK paths, device evidence, and signing keys are ignored by Git. Commit source, wrapper files, tests, and documentation to sync the two PCs when authorized. Debug signing keys are local to each PC; updating an already installed APK from the other PC requires the same private signing key. Never commit that key to GitHub.
+From the repository root, run `python -m unittest -q`. Shell regressions need Git for Windows `sh.exe` and use fake Android commands; they do not operate the phone. [FINDINGS.md](FINDINGS.md) distinguishes historical results from current beta checks.
 
-`UPDATE_ON_PHONE.cmd` installs the built APK on exactly one connected, authorized phone and opens it. It does not launch a second external controller. Both USB helpers find ADB through `NXTPAPER_ADB`, `PATH`, or the default local Android SDK location.
+Public release signing uses a permanent private key outside Git; release builds fail if it is unavailable. Existing debug installations require a separately coordinated migration, because the public certificate is different. Do not uninstall, clear settings or replace a live controller automatically. See [release/signing and acceptance gates](docs/RELEASE.md), [release notes](RELEASE_NOTES.md) and [current implementation handoff](HANDOFF/tasks/public-beta-2026-11-05.md).
 
-Android build and controller regression results are recorded in `FINDINGS.md`. Physical-switch repetition, transition timing, Wi-Fi loss, reboot startup, and screen layout require a connected handset trial; automated tests do not establish those device outcomes.
+The existing [GitHub repository](https://github.com/arazi-hash/AnalogAnchor_NXTPAPER_E-Ink-Pre-Commitment-Mode) is the release source. GitHub prerelease and ShizuCoreFetch are the first intended channels; metadata alone does not mean the app is listed. IzzyOnDroid eligibility is separate because of its current AI-code policy. Source is [Apache-2.0](LICENSE); dependencies retain their [own notices](THIRD_PARTY_NOTICES.md).
 
-Run `python -m unittest -q` from the repository root. The shell regressions execute the shipped script with fake Android commands; they do not operate a phone. On Windows they require Git for Windows' `sh.exe` (or a POSIX shell on Linux). A missing shell skips those regressions and must be reported. See [FINDINGS.md](FINDINGS.md) for current delayed-exit test/build results, separate from the historical 1.0.3 baseline of **153 Python + eight Android tests**. Stop the PC demo before using the standalone guard so only one controller manages the phone.
 
-## Original USB-connected PC demo
+## Original USB-connected PC demo (historical evidence)
+
+The following sections describe the separate PC demo and its recorded October
+2026 trials. They do not replace the Android beta evidence above. Current PC
+native commands use the shared compatibility registry and require a matching
+local qualification from the phone's guided setup.
+Run one controller at a time. Complete or stop the on-phone guard through its
+supported route before starting the PC demo; preserve an unknown live controller.
 
 This PC program keeps your USB-connected TCL NXTPAPER 70 Pro in its **native Max Ink** experience for five minutes. Moving the physical slider to Ink starts a session after native Max Ink is confirmed. Early exits trigger native re-entry without restarting the timer. At expiry, the program restores normal mode even if the slider remains in the Ink position.
 
@@ -75,9 +77,9 @@ The launcher's **STARTING** message means it is opening the program; wait for **
 
 To stop early as the operator, type `stop` and press Enter, or press Ctrl+C. Leave the terminal open while it restores normal. This operator override is intentional for the demonstration.
 
-The phone's existing switch configuration must already select Max Ink with immediate switching. The controller verifies that configuration, refuses unsupported firmware, and stops if the configuration changes during a session. It does not change your selected apps or native defaults. The Analog Anchor app does not need to be among the apps selected for Max Ink because this controller runs on the PC.
+The phone's existing switch configuration must already select Max Ink with immediate switching. The controller verifies that configuration, refuses missing/ambiguous controls or stale qualification, and stops if the configuration changes during a session. It does not change your selected apps or native defaults. The Analog Anchor app does not need to be among the apps selected for Max Ink because this controller runs on the PC.
 
-Python 3.10+ and Android Platform Tools (ADB) are required. Both are already available on the original PC. No Python packages, Android Studio, phone app installation, or root access are required.
+Python 3.10+ and Android Platform Tools (ADB) are required. No third-party Python packages, Android Studio or root access are needed for the PC runtime. The original trials did not require a phone app; the current native-command gates additionally require the matching guided qualification described above.
 
 ## Run from PowerShell
 
@@ -154,16 +156,16 @@ Run the automated checks with:
 python -m unittest -v
 ```
 
-The original PC/diagnostic suite has **73 tests**; the final total including standalone shell regressions is **153 passed**, plus **eight Android unit tests**. The 110-test pre-update baseline and final 1.0.3 verification are separated in [FINDINGS.md](FINDINGS.md). In the historical corrected 60-second PC trial, the original deadline stayed fixed through an injected native exit. Max Ink fully recovered in about 13 seconds, the expiry command was about 0.11 seconds after the deadline, and normal mode fully settled 5.68 seconds after that command with the physical slider still ON.
+The historical October PC/diagnostic baseline had **73 tests**, and the 1.0.3 standalone checkpoint recorded **153 Python + eight Android tests**. These are historical counts; [FINDINGS.md](FINDINGS.md) records later beta verification separately. In the corrected 60-second PC trial, the original deadline stayed fixed through an injected native exit. Max Ink fully recovered in about 13 seconds, the expiry command was about 0.11 seconds after the deadline, and Normal fully settled 5.68 seconds after that command with the physical slider still ON.
 
 An idle monitor-failure trial on an earlier controller revision also detected a terminated input stream, attempted native normal restoration, confirmed normal mode, and exited with a failure status. It began in Ready/normal mode and did not start a commitment session.
 
-The final standalone APK's full five-minute entry, expiry, and post-expiry physical Normal trial passed. The original USB-connected PC controller's full five-minute trial remains pending. Twenty consecutive physical recoveries, sustained hours, screen-sleep behavior, USB disconnection, active-session process crashes, reboot recovery, and calling still need recorded live validation. The earlier idle monitor-failure trial does not establish those outcomes.
+The historical 1.0.3 standalone APK's full five-minute entry, expiry and post-expiry physical Normal trial passed. The original USB-connected PC controller's full five-minute trial remains pending. The 7 November Android beta trials added brief sleep/wake and delayed-exit evidence, but do not establish sustained hours, twenty consecutive recoveries, USB-loss behavior, active-session process crashes, reboot recovery or calling. The earlier idle monitor-failure trial does not establish those outcomes either.
 
-This project is separate from the landing-page repository. Its existing [GitHub repository](https://github.com/anchorminimalism-del/AnalogAnchor_NXTPAPER_E-Ink-Pre-Commitment-Mode) is configured as `origin`. The delayed-exit task started from a clean `codex/nxtpaper-demo` at `553ec2a`; its source changes remain local for review. No staging, committing, or pushing was performed for this task. [HANDOFF/LATEST.md](HANDOFF/LATEST.md) records the latest saved state. After reviewed changes are committed and pushed, clone the repository on the second PC:
+This project is separate from the landing-page repository. Its existing [arazi-hash GitHub repository](https://github.com/arazi-hash/AnalogAnchor_NXTPAPER_E-Ink-Pre-Commitment-Mode) is configured as `origin`. [HANDOFF/LATEST.md](HANDOFF/LATEST.md) records current source, verification and publication status; old task snapshots do not establish the current Git state. To work on the second PC, clone that existing repository and pull the latest published source:
 
 ```powershell
-git clone https://github.com/anchorminimalism-del/AnalogAnchor_NXTPAPER_E-Ink-Pre-Commitment-Mode.git AnalogAnchor_NXTPAPER_Demo
+git clone https://github.com/arazi-hash/AnalogAnchor_NXTPAPER_E-Ink-Pre-Commitment-Mode.git AnalogAnchor_NXTPAPER_Demo
 cd AnalogAnchor_NXTPAPER_Demo
 python nxtpaper_diag.py doctor
 ```
@@ -191,4 +193,4 @@ python nxtpaper_demo.py --once
 
 That temporary environment variable applies to this terminal and its child processes. Double-click launchers need ADB available through `PATH`, the default Android SDK location, or a Windows user environment variable named `NXTPAPER_ADB`. Keep the path local to each PC. Pull the latest committed changes before working.
 
-Keep private captures, screenshots, extracted APKs, observations, virtual environments, and PC-specific configuration in ignored local folders. Handset QA screenshots belong under `captures/`; the existing `current_phone_screen*.png` files are also ignored. Required launcher PNGs, Android source, scripts, wrapper files, and tests are tracked source assets. Review `git status` and the source diff before committing this update; the latest changes become available to the other PC after they are committed and pushed to the existing repository.
+Keep private captures, unreviewed screenshots, extracted APKs, observations, virtual environments, and PC-specific configuration in ignored local folders. Handset QA screenshots belong under `captures/`; the existing `current_phone_screen*.png` files are also ignored. Only privacy-reviewed publication screenshots belong in the tracked Fastlane image folders. Do not publish native launcher captures containing personal app selections. Required launcher PNGs, Android source, scripts, wrapper files, and tests are tracked source assets. Review `git status` and the source diff before committing; the latest changes become available to the other PC after they are committed and pushed to the existing repository.

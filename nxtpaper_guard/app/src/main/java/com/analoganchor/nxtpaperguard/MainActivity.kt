@@ -52,6 +52,14 @@ class MainActivity : AppCompatActivity() {
     private var actionSequence = 0
     private var hasStatusResult = false
     private var diagnosisInFlight = false
+    private var setupInFlight = false
+    private val setupCommands = SetupCommandQueue()
+    private var setupSnapshot = GuardRuntime.SetupSnapshot()
+    private lateinit var setupGuidePolicy: SetupGuidePolicy
+    private var setupGuideDialog: AlertDialog? = null
+    private var setupDetailsExpanded = false
+    private var setupWasQualified: Boolean? = null
+    private var nextResumeStartsVisit = false
 
     private val notificationPermission = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -69,6 +77,9 @@ class MainActivity : AppCompatActivity() {
             refreshConnectionAndHardware()
             if (GuardRuntime.isAuthorized() && !actionInFlight && !diagnosisInFlight) {
                 runAction(GuardRuntime.Action.STATUS)
+            }
+            if (GuardRuntime.isAuthorized() && !setupInFlight && !diagnosisInFlight) {
+                runSetup(if (setupSnapshot.assessment == null) GuardRuntime.SetupAction.CHECK else GuardRuntime.SetupAction.STATUS)
             }
             mainHandler.postDelayed(this, 2_000)
         }
@@ -116,6 +127,10 @@ class MainActivity : AppCompatActivity() {
         }
         setContentView(R.layout.activity_main)
         applySafeInsets()
+        setupGuidePolicy = SetupGuidePolicy(SetupGuidePolicy.restoreHandled(
+            savedInstanceState?.getBoolean("setup_guide_handled") ?: false,
+            savedInstanceState?.getString("setup_guide_visit"), guideVisitToken()))
+        setupDetailsExpanded = savedInstanceState?.getBoolean("setup_details_expanded") ?: false
 
         tvShizukuStatus = findViewById(R.id.tvShizukuStatus)
         tvHardwareState = findViewById(R.id.tvHardwareState)
@@ -197,6 +212,19 @@ class MainActivity : AppCompatActivity() {
         btnTestInk.setOnClickListener { runAction(GuardRuntime.Action.TEST_INK) }
         btnTestNormal.setOnClickListener { runAction(GuardRuntime.Action.TEST_NORMAL) }
         findViewById<Button>(R.id.btnCheckCompatibility).setOnClickListener { showCompatibility() }
+        findViewById<Button>(R.id.btnSetup).setOnClickListener { advanceSetup() }
+        findViewById<Button>(R.id.btnCancelSetup).setOnClickListener { runSetup(GuardRuntime.SetupAction.ABORT) }
+        findViewById<Button>(R.id.btnRecoverAfterRestart).setOnClickListener {
+            AlertDialog.Builder(this).setTitle(R.string.setup_recover).setMessage(R.string.setup_recover_explanation)
+                .setPositiveButton(R.string.setup_recover) { _, _ -> runSetup(GuardRuntime.SetupAction.RECOVER) }
+                .setNegativeButton(R.string.btn_close, null).show()
+        }
+        findViewById<Button>(R.id.btnCompatibilityReport).setOnClickListener { showReport() }
+        findViewById<Button>(R.id.btnToggleSetupDetails).setOnClickListener {
+            setupDetailsExpanded = !setupDetailsExpanded
+            refreshSetup(GuardRuntime.isAuthorized())
+        }
+        findViewById<Button>(R.id.btnReadSetupGuide).setOnClickListener { showSetupGuide() }
         findViewById<Button>(R.id.btnWebsite).setOnClickListener {
             val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://get-analog-anchor.com")).apply {
                 addCategory(Intent.CATEGORY_BROWSABLE)
@@ -215,7 +243,12 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        if (nextResumeStartsVisit) {
+            setupGuidePolicy.beginVisit()
+            nextResumeStartsVisit = false
+        }
         visible = true
+        if (GuardRuntime.isAuthorized()) runSetup(GuardRuntime.SetupAction.CHECK)
         mainHandler.removeCallbacks(poll)
         poll.run()
     }
@@ -226,7 +259,25 @@ class MainActivity : AppCompatActivity() {
         super.onPause()
     }
 
+    override fun onStop() {
+        if (!isChangingConfigurations) {
+            nextResumeStartsVisit = true
+            setupGuidePolicy.beginVisit()
+            guideVisitGeneration++
+        }
+        setupGuideDialog?.dismiss()
+        super.onStop()
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        outState.putBoolean("setup_guide_handled", setupGuidePolicy.handledThisVisit)
+        outState.putString("setup_guide_visit", guideVisitToken())
+        outState.putBoolean("setup_details_expanded", setupDetailsExpanded)
+        super.onSaveInstanceState(outState)
+    }
+
     override fun onDestroy() {
+        setupGuideDialog?.dismiss()
         Shizuku.removeRequestPermissionResultListener(permissionListener)
         Shizuku.removeBinderReceivedListener(binderReceivedListener)
         Shizuku.removeBinderDeadListener(binderDeadListener)
@@ -378,7 +429,8 @@ class MainActivity : AppCompatActivity() {
         btnToggleService.setTextColor(ContextCompat.getColor(this, if (stopping) R.color.white else R.color.gray_dark))
         btnToggleService.isEnabled = (hasStatusResult || stopping) && !exitPending && lastResult.phase != "RESTORING" &&
             (authorized || wanted) && (!actionInFlight || currentAction == GuardRuntime.Action.STATUS ||
-            (stopping && currentAction !in setOf(GuardRuntime.Action.STOP, GuardRuntime.Action.CANCEL_STOP)))
+            (stopping && currentAction !in setOf(GuardRuntime.Action.STOP, GuardRuntime.Action.CANCEL_STOP))) &&
+            (stopping || setupSnapshot.qualified) && !setupSnapshot.trial.active
         btnCancelResume.setText(if (exitPending) R.string.btn_continue_commitment else R.string.btn_cancel_resume)
         btnCancelResume.visibility = if (exitPending || (authorized && wanted && !active &&
             lastResult.phase != "UPDATE_REQUIRED")) View.VISIBLE else View.GONE
@@ -387,7 +439,7 @@ class MainActivity : AppCompatActivity() {
         findViewById<View>(R.id.tvExitPolicy).visibility = if (exitPending || lastResult.phase == "RESTORING") View.GONE else View.VISIBLE
         findViewById<Button>(R.id.btnLanguage).isEnabled = !actionInFlight || currentAction == GuardRuntime.Action.STATUS
         refreshDurationControls(authorized)
-        val testsAllowed = authorized && hasStatusResult && !wanted && lastResult.phase == "STOPPED" &&
+        val testsAllowed = authorized && setupSnapshot.qualified && !setupSnapshot.trial.active && hasStatusResult && !wanted && lastResult.phase == "STOPPED" &&
             (!actionInFlight || currentAction == GuardRuntime.Action.STATUS)
         btnTestInk.isEnabled = testsAllowed
         btnTestNormal.isEnabled = testsAllowed
@@ -395,6 +447,181 @@ class MainActivity : AppCompatActivity() {
             isEnabled = !diagnosisInFlight
             setText(if (diagnosisInFlight) R.string.compatibility_checking else R.string.btn_check_compatibility)
         }
+        refreshSetup(authorized)
+    }
+
+    private fun runSetup(action: GuardRuntime.SetupAction) {
+        val next = setupCommands.request(action) ?: return
+        dispatchSetup(next)
+    }
+
+    private fun dispatchSetup(action: GuardRuntime.SetupAction) {
+        setupInFlight = true
+        if (!isFinishing && !isDestroyed) refreshSetup(GuardRuntime.isAuthorized())
+        GuardRuntime.setupAsync(this, action) { snapshot ->
+            setupSnapshot = snapshot
+            setupInFlight = false
+            val next = setupCommands.finished()
+            // Owner intent outlives the Activity just as the independent trial does.
+            if (next != null) dispatchSetup(next)
+            else if (!isFinishing && !isDestroyed) refreshConnectionAndHardware()
+        }
+    }
+
+    private fun advanceSetup() {
+        val trial = setupSnapshot.trial
+        when {
+            trial.phase == "WAIT_OWNER_CONFIRM" -> AlertDialog.Builder(this)
+                .setTitle(R.string.setup_native_confirm_title).setMessage(R.string.setup_native_confirm)
+                .setPositiveButton(R.string.setup_confirm_native) { _, _ -> runSetup(GuardRuntime.SetupAction.CONFIRM_NATIVE) }
+                .setNegativeButton(R.string.btn_close, null).show()
+            trial.phase == "PASSED" -> AlertDialog.Builder(this)
+                .setTitle(R.string.setup_restored_title).setMessage(R.string.setup_restored_confirm)
+                .setPositiveButton(R.string.setup_confirm_normal) { _, _ -> runSetup(GuardRuntime.SetupAction.QUALIFY) }
+                .setNegativeButton(R.string.btn_close, null).show()
+            setupSnapshot.assessment?.eligible == true && !setupSnapshot.qualified -> AlertDialog.Builder(this)
+                .setTitle(R.string.setup_title).setMessage(R.string.setup_consent)
+                .setPositiveButton(R.string.setup_begin) { _, _ -> runSetup(GuardRuntime.SetupAction.START) }
+                .setNegativeButton(R.string.btn_close, null).show()
+            else -> runSetup(GuardRuntime.SetupAction.CHECK)
+        }
+    }
+
+    private fun refreshSetup(authorized: Boolean) {
+        val snapshot = setupSnapshot
+        val phase = snapshot.trial.phase
+        val ownerBusy = setupCommands.ownerWorkPending
+        val trialNeedsAttention = snapshot.trial.active || phase == "PASSED"
+        if (snapshot.assessment != null) {
+            if (snapshot.qualified && setupWasQualified != true) setupDetailsExpanded = false
+            setupWasQualified = snapshot.qualified
+        }
+        if (trialNeedsAttention) setupDetailsExpanded = true
+        findViewById<View>(R.id.layoutSetupDetails).visibility = if (setupDetailsExpanded) View.VISIBLE else View.GONE
+        findViewById<TextView>(R.id.tvSetupSummary).setText(when {
+            !authorized -> R.string.setup_summary_connect
+            trialNeedsAttention -> R.string.setup_summary_testing
+            snapshot.qualified -> R.string.setup_summary_ready
+            phase in setOf("FAILED", "UNKNOWN") || snapshot.error != null -> R.string.setup_summary_attention
+            snapshot.assessment?.level == SupportAssessment.Level.UNSUPPORTED -> R.string.setup_summary_attention
+            snapshot.assessment?.level == SupportAssessment.Level.EXPERIMENTAL_ELIGIBLE -> R.string.setup_summary_experimental
+            snapshot.assessment == null -> R.string.setup_summary_checking
+            else -> R.string.setup_summary_required
+        })
+        findViewById<Button>(R.id.btnToggleSetupDetails).apply {
+            setText(if (trialNeedsAttention) R.string.setup_summary_testing else if (setupDetailsExpanded) R.string.setup_hide_details else R.string.setup_show_details)
+            isEnabled = !trialNeedsAttention
+        }
+        findViewById<TextView>(R.id.tvSetupStatus).text = snapshot.error ?: getString(when {
+            !authorized -> R.string.setup_connect
+            lastResult.phase == "UPDATE_REQUIRED" -> R.string.setup_busy
+            snapshot.qualified -> R.string.setup_complete
+            snapshot.controllerPresent -> R.string.setup_busy
+            snapshot.assessment?.level == SupportAssessment.Level.MAINTAINER_TESTED -> R.string.setup_tested
+            snapshot.assessment?.level == SupportAssessment.Level.EXPERIMENTAL_ELIGIBLE -> R.string.setup_experimental
+            snapshot.assessment != null -> R.string.setup_unsupported
+            else -> R.string.setup_required
+        })
+        findViewById<TextView>(R.id.tvSetupInstructions).setText(when (phase) {
+            "INITIALIZING" -> R.string.setup_initializing
+            "WAIT_NORMAL" -> R.string.setup_wait_normal
+            "WAIT_PHYSICAL_INK" -> R.string.setup_wait_ink
+            "WAIT_PHYSICAL_NORMAL" -> R.string.setup_wait_return
+            "WAIT_OWNER_CONFIRM" -> R.string.setup_owner_step
+            "WAIT_EXIT_INK" -> R.string.setup_wait_exit_ink
+            "EXIT_TEST" -> R.string.setup_exit_test
+            "WAIT_EXIT_NORMAL" -> R.string.setup_wait_exit_normal
+            "ENTER_TEST", "RESTORE_TEST" -> R.string.setup_software_test
+            "PASSED" -> R.string.setup_passed
+            "ABORTING" -> R.string.setup_aborting
+            "ABORTED" -> R.string.setup_aborted
+            "FAILED", "UNKNOWN" -> R.string.setup_failed
+            "QUALIFIED" -> if (snapshot.qualified) R.string.setup_complete_detail else R.string.setup_intro
+            else -> if (snapshot.qualified) R.string.setup_complete_detail else R.string.setup_intro
+        })
+        findViewById<Button>(R.id.btnSetup).apply {
+            setText(when {
+                ownerBusy -> R.string.compatibility_checking
+                phase == "WAIT_OWNER_CONFIRM" -> R.string.setup_confirm_native
+                phase == "PASSED" -> R.string.setup_confirm_normal
+                snapshot.assessment?.eligible == true && !snapshot.qualified -> R.string.setup_begin
+                else -> R.string.setup_check
+            })
+            isEnabled = authorized && !ownerBusy && (!actionInFlight || currentAction == GuardRuntime.Action.STATUS) && !snapshot.controllerPresent &&
+                lastResult.phase != "UPDATE_REQUIRED" && (!snapshot.trial.active || phase == "WAIT_OWNER_CONFIRM")
+        }
+        findViewById<Button>(R.id.btnCancelSetup).apply {
+            visibility = if (snapshot.trial.active || phase == "PASSED") View.VISIBLE else View.GONE
+            isEnabled = authorized && !setupCommands.cancelling && phase != "ABORTING"
+        }
+        findViewById<Button>(R.id.btnCompatibilityReport).isEnabled = snapshot.assessment != null
+        findViewById<Button>(R.id.btnRecoverAfterRestart).apply {
+            visibility = if ((snapshot.controllerPresent && !isGuardActive()) || lastResult.phase == "UPDATE_REQUIRED") View.VISIBLE else View.GONE
+            isEnabled = authorized && !ownerBusy && (!actionInFlight || currentAction == GuardRuntime.Action.STATUS)
+        }
+        findViewById<Button>(R.id.btnReadSetupGuide).isEnabled = !guideIsBlocked()
+        maybeShowSetupGuide(authorized)
+    }
+
+    private fun setupGuideKey(): String = SetupGuidePolicy.acknowledgementKey(
+        Build.FINGERPRINT, setupSnapshot.assessment?.binding?.digest)
+
+    private fun guideVisitToken(): String = "$GUIDE_PROCESS_TOKEN:$guideVisitGeneration"
+
+    private fun guideIsBlocked(): Boolean = setupCommands.ownerWorkPending || diagnosisInFlight ||
+        (actionInFlight && currentAction != GuardRuntime.Action.STATUS) ||
+        setupSnapshot.trial.active || setupSnapshot.trial.phase == "PASSED" ||
+        setupSnapshot.controllerPresent || isGuardActive() || GuardRuntime.desired(this) || lastResult.phase == "UPDATE_REQUIRED"
+
+    private fun maybeShowSetupGuide(authorized: Boolean) {
+        if (!visible || isFinishing || isDestroyed) return
+        val blocked = guideIsBlocked()
+        if (blocked) { setupGuideDialog?.dismiss(); return }
+        if (!hasWindowFocus()) return
+        if (authorized && (setupSnapshot.assessment == null || !hasStatusResult)) return
+        val acknowledged = getSharedPreferences("setup_guide", MODE_PRIVATE).getString("acknowledged_key", null)
+        if (setupGuideDialog?.isShowing != true && setupGuidePolicy.shouldShow(!setupSnapshot.qualified, blocked, setupGuideKey(), acknowledged)) {
+            showSetupGuide()
+        }
+    }
+
+    private fun showSetupGuide() {
+        if (isFinishing || isDestroyed || setupGuideDialog?.isShowing == true || guideIsBlocked()) return
+        val key = setupGuideKey()
+        setupGuidePolicy.shown()
+        fun acknowledge() {
+            getSharedPreferences("setup_guide", MODE_PRIVATE).edit().putString("acknowledged_key", key).apply()
+        }
+        setupGuideDialog = AlertDialog.Builder(this)
+            .setTitle(R.string.setup_title)
+            .setMessage(findViewById<TextView>(R.id.tvSetupStatus).text.toString() + "\n\n" +
+                getString(if (setupSnapshot.qualified) R.string.setup_complete_detail else R.string.setup_popup_message))
+            .setPositiveButton(if (GuardRuntime.isAuthorized()) R.string.setup_open_details else R.string.setup_connect_action) { _, _ ->
+                acknowledge()
+                setupDetailsExpanded = true
+                refreshSetup(GuardRuntime.isAuthorized())
+                if (!GuardRuntime.isAuthorized()) requestShizukuPermission()
+            }
+            .setNeutralButton(R.string.setup_got_it) { _, _ ->
+                acknowledge()
+                setupDetailsExpanded = false
+                refreshSetup(GuardRuntime.isAuthorized())
+            }
+            .setNegativeButton(R.string.setup_later, null)
+            .create().also { dialog ->
+                dialog.setOnDismissListener { setupGuideDialog = null }
+                dialog.show()
+            }
+    }
+
+    private fun showReport() {
+        val report = setupSnapshot.assessment?.report(BuildConfig.VERSION_NAME, setupSnapshot.trial.phase + ":" + setupSnapshot.trial.reason,
+            setupSnapshot.qualified) ?: return
+        AlertDialog.Builder(this).setTitle(R.string.setup_report).setMessage(report)
+            .setPositiveButton(R.string.setup_share) { _, _ ->
+                val send = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, report)
+                startActivity(Intent.createChooser(send, getString(R.string.setup_share)))
+            }.setNegativeButton(R.string.btn_close, null).show()
     }
 
     private fun showCompatibility() {
@@ -499,7 +726,8 @@ class MainActivity : AppCompatActivity() {
         for ((duration, button) in durationButtons) {
             val selected = displayedDuration == duration
             button.isSelected = selected
-            button.isEnabled = authorized && hasStatusResult && !locked && (!actionInFlight || currentAction == GuardRuntime.Action.STATUS)
+            button.isEnabled = authorized && hasStatusResult && !locked && !setupSnapshot.trial.active &&
+                (setupSnapshot.qualified || isGuardActive()) && (!actionInFlight || currentAction == GuardRuntime.Action.STATUS)
             val border = if (selected) R.color.accent_gold else R.color.gray_border
             button.strokeColor = ContextCompat.getColorStateList(this, border)
             button.strokeWidth = if (selected) 2 * resources.displayMetrics.density.toInt().coerceAtLeast(1) else 1
@@ -531,6 +759,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     companion object {
+        private val GUIDE_PROCESS_TOKEN = java.util.UUID.randomUUID().toString()
+        private var guideVisitGeneration = 0L
         private const val SHIZUKU_PERMISSION_REQUEST = 1001
         private const val SHIZUKU_PACKAGE = "moe.shizuku.privileged.api"
         private val VERIFIED_PHASES = setOf(

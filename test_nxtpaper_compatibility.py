@@ -20,6 +20,9 @@ CAPABILITIES = '''add device 1: /dev/input/event2
     KEY (0001): KEY_BRIGHTNESS_MIN KEY_BRIGHTNESS_MAX
 '''
 KEYLAYOUT = "key 592 TSWT_ON\nkey 593 TSWT_OFF\n"
+INPUT_DUMP = "    5: tswt\n      Path: /dev/input/event2\n      KeyLayoutFile: /system/usr/keylayout/Generic.kl\n"
+SYMBOLS = "symbol_on=KEYCODE_TSWT_ON\nenter_key=400\nresolved_on=KEYCODE_TSWT_ON\nsymbol_off=KEYCODE_TSWT_OFF\nexit_key=401\nresolved_off=KEYCODE_TSWT_OFF\n"
+APP_PATH = "/data/app/~~abc/pkg==/base.apk"
 SETTINGS = """TSWT_state=0
 nxtpaper_ink_style_state=0
 nxtpaper_book_style_state=0
@@ -266,6 +269,223 @@ class CompatibilityCliTests(unittest.TestCase):
         self.assertEqual(json.loads(console.getvalue())["classification"], "PRIVILEGE_UNAVAILABLE")
         self.assertNotIn("private-serial", console.getvalue())
         self.assertEqual(errors.getvalue(), "")
+
+
+def public_adb(changes=None, *, unknown=False, symbols=True):
+    responses = {
+        ("shell", "getprop", "ro.product.manufacturer"): captured("TCL"),
+        ("shell", "getprop", "sys.tct.support_ui_switch_button"): captured(),
+        ("shell", "pm", "list", "features"): captured("feature:vendor.software.support.tcl_switch\nfeature:android.hardware.telephony\n"),
+        ("shell", "test", "-r", "/dev/input/event2"): captured(),
+        ("shell", "dumpsys", "input"): captured(INPUT_DUMP),
+        ("shell", "sha256sum", PROFILE["keylayout"]): captured("a" * 64 + "  " + PROFILE["keylayout"]),
+    }
+    for package in ("com.android.systemui", "com.tcl.android.launcher", "com.tct.onetouchbooster"):
+        responses[("shell", "dumpsys", "package", package)] = captured("versionCode=123")
+    if unknown:
+        responses[("shell", "getprop", "ro.build.fingerprint")] = captured("TCL/Other/Phone:16/BUILD/NEW:user/release-keys")
+    if symbols:
+        responses[("shell", "pm", "path", "com.analoganchor.nxtpaperguard")] = captured("package:" + APP_PATH)
+        responses[("shell", "env", "CLASSPATH=" + APP_PATH, "app_process", "/",
+                   "com.analoganchor.nxtpaperguard.KeySymbolProbe")] = captured(
+                       SYMBOLS if unknown else SYMBOLS.replace("enter_key=400", "enter_key=343").replace("exit_key=401", "exit_key=344"))
+    responses.update(changes or {})
+    return FakeAdb(responses)
+
+
+def qualification_text(binding, **changes):
+    values = {"schema": "1", "binding_sha256": binding.digest,
+              "controller_sha256": binding["controller_sha256"], "trial_id": "123-45-6",
+              "owner_confirmed": "1", "result": "passed"}
+    values.update(changes)
+    return "".join(f"{key}={value}\n" for key, value in values.items())
+
+
+class PublicSupportTests(unittest.TestCase):
+    def assess(self, adb):
+        return compatibility.assess_support(adb, controller_sha256="b" * 64)
+
+    def test_unknown_build_is_eligible_with_runtime_symbols_but_requires_local_setup(self):
+        result = self.assess(public_adb(unknown=True))
+        self.assertEqual(result.support_level, "EXPERIMENTAL_ELIGIBLE")
+        self.assertEqual(result.setup_state, "REQUIRED")
+        self.assertEqual(result.binding["enter_key"], "400")
+        self.assertEqual(result.binding["exit_key"], "401")
+        self.assertEqual(result.binding["id"], "tcl-slider-experimental")
+        self.assertEqual(result.binding["qualification"], "experimental")
+
+    def test_missing_or_ambiguous_registry_never_selects_a_fallback(self):
+        for registry in ((), (PROFILE, PROFILE)):
+            result = compatibility.assess_support(public_adb(), registry)
+            self.assertIsNone(result.binding)
+            self.assertEqual(result.reasons, ("REGISTRY_AMBIGUOUS",))
+
+    def test_only_exact_reviewed_build_may_use_historical_keys_without_symbol_helper(self):
+        known = self.assess(public_adb(symbols=False))
+        self.assertEqual(known.support_level, "MAINTAINER_TESTED")
+        self.assertEqual(known.binding["enter_key"], "343")
+        result = self.assess(public_adb(unknown=True, symbols=False))
+        self.assertEqual(result.support_level, "UNSUPPORTED")
+        self.assertIsNone(result.binding)
+
+    def test_unknown_symbol_codes_require_distinct_nonzero_exact_roundtrip(self):
+        command = ("shell", "env", "CLASSPATH=" + APP_PATH, "app_process", "/",
+                   "com.analoganchor.nxtpaperguard.KeySymbolProbe")
+        for symbols in (SYMBOLS.replace("enter_key=400", "enter_key=0"),
+                        SYMBOLS.replace("exit_key=401", "exit_key=400"),
+                        SYMBOLS.replace("resolved_on=KEYCODE_TSWT_ON", "resolved_on=400"),
+                        SYMBOLS.replace("enter_key=400", "enter_key=32768"), SYMBOLS + "enter_key=400\n"):
+            with self.subTest(symbols=symbols):
+                self.assertIsNone(self.assess(public_adb({command: captured(symbols)}, unknown=True)).binding)
+
+    def test_known_build_conflicting_runtime_symbols_are_not_silently_replaced_with_historical_keys(self):
+        command = ("shell", "env", "CLASSPATH=" + APP_PATH, "app_process", "/",
+                   "com.analoganchor.nxtpaperguard.KeySymbolProbe")
+        result = self.assess(public_adb({command: captured(SYMBOLS)}))
+        self.assertIsNone(result.binding)
+        self.assertEqual(result.reasons, ("REVIEWED_SYMBOL_MAPPING_CHANGED",))
+
+    def test_fully_unavailable_symbols_allow_only_the_exact_historical_amd9_pair(self):
+        command = ("shell", "env", "CLASSPATH=" + APP_PATH, "app_process", "/",
+                   "com.analoganchor.nxtpaperguard.KeySymbolProbe")
+        missing = "symbol_on=KEYCODE_TSWT_ON\nenter_key=0\nresolved_on=KEYCODE_UNKNOWN\n" \
+                  "symbol_off=KEYCODE_TSWT_OFF\nexit_key=0\nresolved_off=KEYCODE_UNKNOWN\n"
+        known = self.assess(public_adb({command: captured(missing)}))
+        self.assertEqual(known.binding["enter_key"], "343")
+        self.assertEqual(known.binding["exit_key"], "344")
+        unknown = self.assess(public_adb({command: captured(missing)}, unknown=True))
+        self.assertIsNone(unknown.binding)
+        for malformed in (missing.replace("enter_key=0", "enter_key=501"),
+                          missing.replace("resolved_on=KEYCODE_UNKNOWN", "resolved_on=KEYCODE_TSWT_ON"),
+                          missing.replace("resolved_off=KEYCODE_UNKNOWN", "resolved_off=0")):
+            with self.subTest(malformed=malformed):
+                self.assertIsNone(self.assess(public_adb({command: captured(malformed)})).binding)
+
+    def test_actual_amd9_fingerprint_alias_roundtrip_is_narrowly_reviewed(self):
+        command = ("shell", "env", "CLASSPATH=" + APP_PATH, "app_process", "/",
+                   "com.analoganchor.nxtpaperguard.KeySymbolProbe")
+        aliases = "symbol_on=KEYCODE_TSWT_ON\nenter_key=343\nresolved_on=KEYCODE_FP_LIFT_UP\n" \
+                  "symbol_off=KEYCODE_TSWT_OFF\nexit_key=344\nresolved_off=KEYCODE_FP_LONGPRESS\n"
+        known = self.assess(public_adb({command: captured(aliases)}))
+        self.assertEqual(known.support_level, "MAINTAINER_TESTED")
+        self.assertEqual((known.binding["enter_key"], known.binding["exit_key"]), ("343", "344"))
+        self.assertIsNone(self.assess(public_adb({command: captured(aliases)}, unknown=True)).binding)
+        for malformed in (aliases.replace("enter_key=343", "enter_key=501"),
+                          aliases.replace("resolved_on=KEYCODE_FP_LIFT_UP", "resolved_on=KEYCODE_TSWT_ON"),
+                          aliases.replace("resolved_off=KEYCODE_FP_LONGPRESS", "resolved_off=KEYCODE_OTHER")):
+            with self.subTest(malformed=malformed):
+                self.assertIsNone(self.assess(public_adb({command: captured(malformed)})).binding)
+
+    def test_registry_entry_alone_cannot_grant_another_build_the_amd9_alias_exception(self):
+        command = ("shell", "env", "CLASSPATH=" + APP_PATH, "app_process", "/",
+                   "com.analoganchor.nxtpaperguard.KeySymbolProbe")
+        aliases = "symbol_on=KEYCODE_TSWT_ON\nenter_key=343\nresolved_on=KEYCODE_FP_LIFT_UP\n" \
+                  "symbol_off=KEYCODE_TSWT_OFF\nexit_key=344\nresolved_off=KEYCODE_FP_LONGPRESS\n"
+        changed_fingerprint = "TCL/Other/Phone:16/BUILD/NEW:user/release-keys"
+        modified = compatibility.parse_profile(PROFILE_TEXT.replace(PROFILE["fingerprint"], changed_fingerprint))
+        adb = public_adb({command: captured(aliases)}, unknown=True)
+        self.assertIsNone(compatibility.assess_support(adb, (modified,)).binding)
+
+    def test_feature_version_suffix_is_recognized_without_accepting_partial_names(self):
+        command = ("shell", "pm", "list", "features")
+        features = "feature:vendor.software.support.tcl_switch=1\nfeature:android.hardware.telephony=2\n"
+        self.assertIsNotNone(self.assess(public_adb({command: captured(features)})).binding)
+        self.assertIsNone(self.assess(public_adb({command: captured(features.replace("tcl_switch=1", "tcl_switch_other=1"))})).binding)
+
+    def test_push_control_property_requires_its_own_reviewed_adapter(self):
+        command = ("shell", "getprop", "sys.tct.support_ui_switch_button")
+        for value in ("", "0", "false"):
+            with self.subTest(value=value):
+                self.assertIsNotNone(self.assess(public_adb({command: captured(value)})).binding)
+        for value in ("1", "true", "2", "unknown"):
+            with self.subTest(value=value):
+                result = self.assess(public_adb({command: captured(value)}))
+                self.assertIsNone(result.binding)
+                self.assertEqual(result.reasons, ("PUSH_BUTTON_PROTOCOL_UNSUPPORTED",))
+
+    def test_missing_feature_push_only_phone_unreadable_input_or_component_is_unsupported(self):
+        changes = (
+            {("shell", "pm", "list", "features"): captured("feature:android.hardware.telephony")},
+            {("shell", "pm", "list", "features"): captured("feature:vendor.software.support.tcl_switch")},
+            {("shell", "getevent", "-lp"): captured(CAPABILITIES.replace("tswt", "ui_switch_button"))},
+            {("shell", "test", "-r", "/dev/input/event2"): captured(returncode=1)},
+            {("shell", "dumpsys", "package", "com.android.systemui"): captured("versionCode=0")},
+            {("shell", "settings", "list", "secure"): captured(SETTINGS.replace("tct_nxtpaper_mode_select=3", "tct_nxtpaper_mode_select=2"))},
+        )
+        for change in changes:
+            with self.subTest(change=change):
+                self.assertIsNone(self.assess(public_adb(change, unknown=True)).binding)
+
+    def test_ambiguous_active_layout_and_mapping_are_rejected(self):
+        variants = (INPUT_DUMP + INPUT_DUMP, INPUT_DUMP.replace("event2", "event9"),
+                    INPUT_DUMP.replace("Generic.kl", "../Generic.kl"),
+                    INPUT_DUMP.replace("KeyLayoutFile:", "InactiveFile:"))
+        for value in variants:
+            with self.subTest(value=value):
+                self.assertIsNone(self.assess(public_adb({("shell", "dumpsys", "input"): captured(value)})).binding)
+        result = self.assess(public_adb({("shell", "cat", PROFILE["keylayout"]): captured(KEYLAYOUT + "key 592 TSWT_ON\n")}))
+        self.assertIsNone(result.binding)
+        result = self.assess(public_adb({("shell", "cat", PROFILE["keylayout"]): captured(KEYLAYOUT + "key 700 TSWT_ON\n")}))
+        self.assertIsNone(result.binding)
+        for flags in ("WAKE", "VIRTUAL", "WAKE_DROPPED"):
+            with self.subTest(flags=flags):
+                result = self.assess(public_adb({("shell", "cat", PROFILE["keylayout"]):
+                                                captured(KEYLAYOUT.replace("592 TSWT_ON", "592 TSWT_ON " + flags))}))
+                self.assertIsNone(result.binding)
+
+    def test_qualification_only_matches_exact_binding_and_owner_confirmation(self):
+        adb = public_adb(unknown=True)
+        initial = self.assess(adb)
+        command = ("shell", "cat", "/data/local/tmp/nxtpaper_guard.qualification")
+        adb.responses[command] = captured(qualification_text(initial.binding))
+        self.assertEqual(self.assess(adb).setup_state, "PASSED")
+        adb.responses[command] = captured(qualification_text(initial.binding, binding_sha256="c" * 64))
+        self.assertEqual(self.assess(adb).setup_state, "STALE")
+        for changes in ({"owner_confirmed": "0"}, {"result": "interrupted"}, {"trial_id": "unknown"}):
+            adb.responses[command] = captured(qualification_text(initial.binding, **changes))
+            self.assertEqual(self.assess(adb).setup_state, "REQUIRED")
+
+    def test_binding_digest_changes_for_native_versions_controller_or_layout_but_not_event_number(self):
+        adb = public_adb()
+        before = self.assess(adb).binding
+        for command, value in (
+            (("shell", "dumpsys", "package", "com.android.systemui"), "versionCode=124"),
+            (("shell", "sha256sum", PROFILE["keylayout"]), "c" * 64 + "  " + PROFILE["keylayout"]),
+        ):
+            changed = self.assess(public_adb({command: captured(value)})).binding
+            self.assertNotEqual(before.digest, changed.digest)
+        changed_controller = compatibility.assess_support(adb, controller_sha256="c" * 64)
+        self.assertNotEqual(before.digest, changed_controller.binding.digest)
+        moved = self.assess(public_adb({
+            ("shell", "getevent", "-lp"): captured(CAPABILITIES.replace("event2", "event42")),
+            ("shell", "dumpsys", "input"): captured(INPUT_DUMP.replace("event2", "event42")),
+            ("shell", "test", "-r", "/dev/input/event42"): captured(),
+        }))
+        self.assertEqual(before.digest, moved.binding.digest)
+
+    def test_canonical_binding_roundtrips_and_cannot_execute_or_select_new_semantics(self):
+        binding = self.assess(public_adb(unknown=True)).binding
+        canonical = compatibility.canonical_profile(binding)
+        self.assertEqual(canonical.splitlines(), sorted(canonical.splitlines()))
+        self.assertEqual(compatibility.parse_profile(canonical).digest, binding.digest)
+        with self.assertRaises(TypeError):
+            binding.values["enter_key"] = "1"
+        for value in (canonical.replace("preset=3", "preset=2"),
+                      canonical.replace("adapter_revision=1", "adapter_revision=2"),
+                      canonical.replace("enter_key=400", "enter_key=$(reboot)")):
+            with self.subTest(value=value), self.assertRaises(compatibility.CompatibilityError):
+                compatibility.parse_profile(value)
+
+    def test_public_assessment_is_readonly_and_report_has_no_private_settings_or_process_tokens(self):
+        adb = public_adb(unknown=True)
+        report = compatibility.observe_compatibility(adb)
+        self.assertEqual(report["public_support"]["level"], "EXPERIMENTAL_ELIGIBLE")
+        self.assertIn("not permanently rejected", report["recovery_action"])
+        self.assertFalse(any(command[:2] in (("shell", "input"), ("shell", "am")) for command in adb.calls))
+        self.assertFalse(any(command[:3] in (("shell", "settings", "put"), ("shell", "settings", "delete")) for command in adb.calls))
+        text = json.dumps(report)
+        for value in (FakeAdb.serial, "private_account", "not-for-sharing", "private-serial-in-stderr"):
+            self.assertNotIn(value, text)
 
 
 if __name__ == "__main__":

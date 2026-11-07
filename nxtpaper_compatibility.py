@@ -19,10 +19,15 @@ from typing import Mapping
 ROOT = Path(__file__).resolve().parent
 PROFILE_DIRECTORY = ROOT / "compatibility" / "profiles"
 PROFILE_PATH = PROFILE_DIRECTORY / "t807d-eea-amd9.properties"
+ADAPTER_PATH = ROOT / "compatibility" / "adapters" / "tcl-slider-v1.properties"
 PROFILE_KEYS = frozenset("""schema id qualification model device android sdk fingerprint
 input_name linux_on linux_off raw_on raw_off keylayout layout_on layout_off
 enter_key exit_key tswt_key ink_key book_key applying_key animation_key preset_key
 preset immediate_key immediate evidence""".split())
+BINDING_KEYS = PROFILE_KEYS | frozenset("""adapter adapter_revision keylayout_sha256
+systemui_version launcher_version manager_version controller_sha256""".split())
+QUALIFICATION_KEYS = frozenset("schema binding_sha256 controller_sha256 trial_id owner_confirmed result".split())
+KEYLAYOUT_PATH_PATTERN = re.compile(r"/(?:system|system_ext|vendor|product|odm)/usr/keylayout/[A-Za-z0-9_.+-]+\.kl\Z")
 
 # Schema 1 implements exactly this reviewed native protocol. New semantics need
 # adapter code and qualification, not an unchecked set of replacement numbers.
@@ -41,6 +46,12 @@ IDENTITY_PROPERTIES = {
     "android": "ro.build.version.release", "sdk": "ro.build.version.sdk",
     "fingerprint": "ro.build.fingerprint",
 }
+# This narrow vendor alias is observed only on the reviewed AMD9 image.
+# Adding registry entries cannot grant another build this exception.
+AMD9_IDENTITY = MappingProxyType({
+    "model": "T807D", "device": "Frida", "android": "16", "sdk": "36",
+    "fingerprint": "TCL/T807D_EEA/Frida:16/BP2A.250605.031.A3/AMD9:user/release-keys",
+})
 NATIVE_PACKAGES = (
     "com.android.systemui", "com.tcl.android.launcher", "com.tct.onetouchbooster",
     "com.tcl.fota.system", "com.analoganchor.nxtpaperguard", "moe.shizuku.privileged.api",
@@ -51,6 +62,10 @@ HASH = re.compile(r"[0-9a-f]{64}\Z")
 
 class CompatibilityError(ValueError):
     """An observation or local profile cannot safely support native commands."""
+
+
+class SymbolHelperUnavailable(CompatibilityError):
+    """The read-only helper or both requested framework symbols are unavailable."""
 
 
 @dataclass(frozen=True)
@@ -68,24 +83,115 @@ class FirmwareProfile:
     def state_keys(self):
         return {name: self[name + "_key"] for name in ("tswt", "ink", "book", "applying", "animation")}
 
+    @property
+    def is_runtime_binding(self):
+        return self["schema"] == "2"
 
-def parse_profile(text):
-    """Parse a strict data-only subset shared with the phone's shell parser."""
+    @property
+    def digest(self):
+        return hashlib.sha256(canonical_profile(self).encode("utf-8")).hexdigest()
+
+
+@dataclass(frozen=True)
+class NativeAdapter:
+    values: Mapping[str, str]
+
+    def __getitem__(self, key):
+        return self.values[key]
+
+
+@dataclass(frozen=True)
+class SupportAssessment:
+    support_level: str
+    reasons: tuple[str, ...]
+    binding: FirmwareProfile | None = None
+    setup_state: str = "REQUIRED"
+
+
+@dataclass(frozen=True)
+class DeviceQualification:
+    values: Mapping[str, str]
+
+    def matches(self, binding):
+        return (binding.is_runtime_binding
+                and self.values["binding_sha256"] == binding.digest
+                and self.values["controller_sha256"] == binding["controller_sha256"])
+
+
+def canonical_profile(profile):
+    """Canonical binding bytes: ASCII key order, LF, one final newline."""
+    return "".join(f"{key}={profile[key]}\n" for key in sorted(profile.values))
+
+
+def _parse_data(text, allowed):
     if "\r" in text or "\x00" in text or text.startswith("\ufeff"):
-        raise CompatibilityError("Profile must be UTF-8 without BOM, with LF line endings.")
+        raise CompatibilityError("Data must be UTF-8 without BOM, with LF line endings.")
     values = {}
     for line in text.splitlines():
         if not line or line.startswith("#"):
             continue
         key, separator, value = line.partition("=")
-        if (not separator or key not in PROFILE_KEYS or key in values or not value
+        if (not separator or key not in allowed or key in values or not value
                 or not re.fullmatch(r"[A-Za-z0-9_./:+-]+", value)):
-            raise CompatibilityError("Malformed, duplicate, or unsupported profile field.")
+            raise CompatibilityError("Malformed, duplicate, or unsupported data field.")
         values[key] = value
-    if values.keys() != PROFILE_KEYS:
+    return values
+
+
+def load_adapter(path=None):
+    expected = {
+        key: value for key, value in SCHEMA_ONE.items()
+        if key not in {"schema", "qualification", "keylayout", "enter_key", "exit_key"}
+    }
+    expected.update({"schema": "1", "id": "tcl-slider-v1", "revision": "1",
+                     "feature": "vendor.software.support.tcl_switch",
+                     "symbol_on": "KEYCODE_TSWT_ON", "symbol_off": "KEYCODE_TSWT_OFF",
+                     "evidence": "FINDINGS.md"})
+    values = _parse_data(Path(path or ADAPTER_PATH).read_bytes().decode("utf-8"), expected.keys())
+    if values != expected:
+        raise CompatibilityError("Adapter requires an unimplemented protocol revision.")
+    return NativeAdapter(MappingProxyType(values))
+
+
+def parse_qualification(text):
+    values = _parse_data(text, QUALIFICATION_KEYS)
+    if (values.keys() != QUALIFICATION_KEYS or values.get("schema") != "1"
+            or values.get("result") != "passed" or values.get("owner_confirmed") != "1"
+            or not HASH.fullmatch(values.get("binding_sha256", ""))
+            or not HASH.fullmatch(values.get("controller_sha256", ""))
+            or not re.fullmatch(r"[1-9][0-9]*-[0-9]+-[0-9]+", values.get("trial_id", ""))):
+        raise CompatibilityError("No completed owner-confirmed setup is available.")
+    return DeviceQualification(MappingProxyType(values))
+
+
+def parse_profile(text):
+    """Parse a strict data-only subset shared with the phone's shell parser."""
+    if "\r" in text or "\x00" in text or text.startswith("\ufeff"):
+        raise CompatibilityError("Profile must be UTF-8 without BOM, with LF line endings.")
+    values = _parse_data(text, BINDING_KEYS)
+    schema = values.get("schema")
+    expected_keys = PROFILE_KEYS if schema == "1" else BINDING_KEYS if schema == "2" else None
+    if expected_keys is None or values.keys() != expected_keys:
         raise CompatibilityError("Firmware profile has missing fields.")
-    if any(values[key] != expected for key, expected in SCHEMA_ONE.items()):
+    fixed = SCHEMA_ONE if schema == "1" else {
+        key: value for key, value in SCHEMA_ONE.items()
+        if key not in {"schema", "qualification", "keylayout", "enter_key", "exit_key"}
+    }
+    if any(values[key] != expected for key, expected in fixed.items()):
         raise CompatibilityError("Profile requires an unimplemented native adapter or qualification.")
+    if schema == "2":
+        if (values["adapter"] != "tcl-slider-v1" or values["adapter_revision"] != "1"
+                or values["qualification"] not in {"maintainer-tested", "experimental"}
+                or not KEYLAYOUT_PATH_PATTERN.fullmatch(values["keylayout"])
+                or ".." in values["keylayout"]
+                or not HASH.fullmatch(values["keylayout_sha256"])
+                or not HASH.fullmatch(values["controller_sha256"])
+                or any(not re.fullmatch(r"[1-9][0-9]*", values[key]) for key in (
+                    "systemui_version", "launcher_version", "manager_version"))
+                or any(not re.fullmatch(r"[1-9][0-9]*", values[key]) or not 1 <= int(values[key]) <= 32767
+                       for key in ("enter_key", "exit_key"))
+                or values["enter_key"] == values["exit_key"]):
+            raise CompatibilityError("Invalid runtime binding or unsupported protocol.")
     if (not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", values["id"])
             or not re.fullmatch(r"[A-Za-z0-9_-]+", values["model"])
             or not re.fullmatch(r"[A-Za-z0-9_-]+", values["device"])
@@ -164,12 +270,193 @@ def validate_keylayout(text, profile):
     mappings = {}
     for line in text.splitlines():
         fields = line.partition("#")[0].split()
+        if (len(fields) >= 3 and fields[0] == "key" and fields[2] in expected.values()
+                and fields[1] not in expected):
+            raise CompatibilityError("Ambiguous physical-switch symbolic keylayout.")
         if len(fields) >= 3 and fields[0] == "key" and fields[1] in expected:
+            if len(fields) != 3:
+                raise CompatibilityError("Physical-switch keylayout flags require a reviewed adapter.")
             if fields[1] in mappings:
                 raise CompatibilityError("Ambiguous physical-switch keylayout.")
             mappings[fields[1]] = fields[2]
     if mappings != expected:
         raise CompatibilityError("Unsupported physical-switch keylayout mapping.")
+
+
+def select_profile(identity, profiles=None):
+    """No first-match fallback: a registry must identify one exact build."""
+    matches = [item for item in (profiles if profiles is not None else load_profiles())
+               if item.identity == identity]
+    if len(matches) > 1:
+        raise CompatibilityError("Firmware registry is ambiguous for this build.")
+    return matches[0] if matches else None
+
+
+def active_keylayout(input_dump, node, input_name="tswt"):
+    """Read EventHub's selected file, not an arbitrary Generic.kl."""
+    starts = list(re.finditer(r"^[ \t]+[0-9]+: ([^\r\n]+)$", input_dump, re.MULTILINE))
+    matches = []
+    for index, start in enumerate(starts):
+        if start.group(1).strip() != input_name:
+            continue
+        end = starts[index + 1].start() if index + 1 < len(starts) else len(input_dump)
+        block = input_dump[start.end():end]
+        paths = re.findall(r"^\s+Path: (/dev/input/event[0-9]+)\s*$", block, re.MULTILINE)
+        layouts = re.findall(r"^\s+KeyLayoutFile: (\S+)\s*$", block, re.MULTILINE)
+        if paths == [node] and len(layouts) == 1:
+            path = layouts[0]
+            if not KEYLAYOUT_PATH_PATTERN.fullmatch(path) or ".." in path:
+                raise CompatibilityError("The active input layout path is unsupported.")
+            matches.append(path)
+        else:
+            raise CompatibilityError("The active input device/layout is ambiguous.")
+    if len(matches) != 1:
+        raise CompatibilityError("The active physical input layout could not be identified.")
+    return matches[0]
+
+
+def parse_symbols(text):
+    fields = frozenset("symbol_on enter_key resolved_on symbol_off exit_key resolved_off".split())
+    values = _parse_data(text, fields)
+    if (values.keys() != fields
+            or values.get("symbol_on") != "KEYCODE_TSWT_ON"
+            or values.get("resolved_on") != "KEYCODE_TSWT_ON"
+            or values.get("symbol_off") != "KEYCODE_TSWT_OFF"
+            or values.get("resolved_off") != "KEYCODE_TSWT_OFF"
+            or any(not re.fullmatch(r"[1-9][0-9]*", values.get(key, ""))
+                   or not 1 <= int(values[key]) <= 32767 for key in ("enter_key", "exit_key"))
+            or values["enter_key"] == values["exit_key"]):
+        raise CompatibilityError("RUNTIME_SYMBOL_MAPPING_UNRESOLVED")
+    return int(values["enter_key"]), int(values["exit_key"])
+
+
+def _runtime_symbols(adb, *, reviewed_amd9=False):
+    try:
+        paths = _read(adb, ("shell", "pm", "path", "com.analoganchor.nxtpaperguard")).splitlines()
+    except CompatibilityError as error:
+        raise SymbolHelperUnavailable("SYMBOL_HELPER_UNAVAILABLE") from error
+    bases = [line[len("package:"):] for line in paths if line.startswith("package:") and line.endswith("/base.apk")]
+    if (len(bases) != 1 or not re.fullmatch(r"/data/app/[A-Za-z0-9_./~+=-]+/base\.apk", bases[0])
+            or ".." in bases[0]):
+        raise SymbolHelperUnavailable("SYMBOL_HELPER_UNAVAILABLE")
+    try:
+        output = _read(adb, ("shell", "env", "CLASSPATH=" + bases[0], "app_process", "/",
+                             "com.analoganchor.nxtpaperguard.KeySymbolProbe"))
+    except CompatibilityError as error:
+        raise SymbolHelperUnavailable("SYMBOL_HELPER_UNAVAILABLE") from error
+    unavailable = {
+        "symbol_on": "KEYCODE_TSWT_ON", "enter_key": "0", "resolved_on": "KEYCODE_UNKNOWN",
+        "symbol_off": "KEYCODE_TSWT_OFF", "exit_key": "0", "resolved_off": "KEYCODE_UNKNOWN",
+    }
+    observed = _parse_data(output, unavailable.keys())
+    if observed == unavailable:
+        # Exact historical AMD9 has an independently reviewed numeric pair.
+        # This exception never authorizes an unfamiliar build or partial pair.
+        raise SymbolHelperUnavailable("SYMBOL_MAPPING_UNAVAILABLE")
+    amd9_aliases = {
+        "symbol_on": "KEYCODE_TSWT_ON", "enter_key": "343", "resolved_on": "KEYCODE_FP_LIFT_UP",
+        "symbol_off": "KEYCODE_TSWT_OFF", "exit_key": "344", "resolved_off": "KEYCODE_FP_LONGPRESS",
+    }
+    if reviewed_amd9 and observed == amd9_aliases:
+        return 343, 344
+    return parse_symbols(output)
+
+
+def build_runtime_binding(identity, *, keylayout, keylayout_sha256, keycodes, versions,
+                          controller_sha256, profiles=None, adapter=None):
+    """Build data only after the caller has established the current protocol."""
+    adapter = adapter or load_adapter()
+    known = select_profile(identity, profiles)
+    reference = known or load_profile()
+    values = dict(reference.values)
+    values.update(identity)
+    values.update({"schema": "2", "adapter": adapter["id"], "adapter_revision": adapter["revision"],
+                   "id": known["id"] if known else "tcl-slider-experimental",
+                   "qualification": "maintainer-tested" if known else "experimental",
+                   "keylayout": keylayout, "keylayout_sha256": keylayout_sha256,
+                   "enter_key": str(keycodes[0]), "exit_key": str(keycodes[1]),
+                   "systemui_version": versions["systemui_version"],
+                   "launcher_version": versions["launcher_version"],
+                   "manager_version": versions["manager_version"],
+                   "controller_sha256": controller_sha256})
+    return parse_profile("".join(f"{key}={values[key]}\n" for key in sorted(values)))
+
+
+def assess_support(adb, profiles=None, *, controller_sha256=None):
+    """Public eligibility and setup are separate from historical qualification."""
+    try:
+        profiles = tuple(profiles if profiles is not None else load_profiles())
+        if (not profiles or len({p["id"] for p in profiles}) != len(profiles)
+                or len({p["fingerprint"] for p in profiles}) != len(profiles)):
+            raise CompatibilityError("REGISTRY_AMBIGUOUS")
+        adapter = load_adapter()
+        uid = _read(adb, ("shell", "id", "-u"))
+        if uid != "2000":
+            return SupportAssessment("UNSUPPORTED", ("SHELL_PRIVILEGE_UNAVAILABLE",), setup_state="ACCESS_REQUIRED")
+        identity = {name: _read(adb, ("shell", "getprop", prop)) for name, prop in IDENTITY_PROPERTIES.items()}
+        known = select_profile(identity, profiles)
+        reviewed_amd9 = bool(known is not None and known["id"] == "t807d-eea-amd9"
+                             and known.identity == AMD9_IDENTITY
+                             and known["enter_key"] == "343" and known["exit_key"] == "344")
+        manufacturer = _read(adb, ("shell", "getprop", "ro.product.manufacturer"))
+        if manufacturer.lower() != "tcl":
+            raise CompatibilityError("TCL_PHONE_REQUIRED")
+        push_control = _read(adb, ("shell", "getprop", "sys.tct.support_ui_switch_button"), allow_empty=True)
+        if push_control not in {"", "0", "false"}:
+            raise CompatibilityError("PUSH_BUTTON_PROTOCOL_UNSUPPORTED")
+        features = {re.sub(r"=[0-9]+$", "", line)
+                    for line in _read(adb, ("shell", "pm", "list", "features")).splitlines()}
+        if "feature:" + adapter["feature"] not in features or "feature:android.hardware.telephony" not in features:
+            raise CompatibilityError("SLIDER_PHONE_FEATURE_REQUIRED")
+        reference = known or profiles[0]
+        try:
+            read_native_state(_read(adb, ("shell", "settings", "list", "secure"), strip=False), reference)
+        except CompatibilityError as error:
+            raise CompatibilityError("NATIVE_SETTINGS_UNAVAILABLE") from error
+        try:
+            node = discover_switch(_read(adb, ("shell", "getevent", "-lp")), reference)
+            _read(adb, ("shell", "test", "-r", node), allow_empty=True)
+        except CompatibilityError as error:
+            raise CompatibilityError("PHYSICAL_INPUT_UNAVAILABLE") from error
+        try:
+            layout = active_keylayout(_read(adb, ("shell", "dumpsys", "input"), strip=False), node, adapter["input_name"])
+            validate_keylayout(_read(adb, ("shell", "cat", layout), strip=False), reference)
+            layout_hash = _read(adb, ("shell", "sha256sum", layout)).split()[0]
+        except CompatibilityError as error:
+            raise CompatibilityError("ACTIVE_LAYOUT_OR_MAPPING_UNAVAILABLE") from error
+        if not HASH.fullmatch(layout_hash):
+            raise CompatibilityError("ACTIVE_LAYOUT_HASH_UNAVAILABLE")
+        try:
+            keycodes = _runtime_symbols(adb, reviewed_amd9=reviewed_amd9)
+        except SymbolHelperUnavailable:
+            if not reviewed_amd9:
+                raise
+            keycodes = int(known["enter_key"]), int(known["exit_key"])
+        if known is not None and keycodes != (int(known["enter_key"]), int(known["exit_key"])):
+            raise CompatibilityError("REVIEWED_SYMBOL_MAPPING_CHANGED")
+        versions = {}
+        for field, package in (("systemui_version", "com.android.systemui"),
+                               ("launcher_version", "com.tcl.android.launcher"),
+                               ("manager_version", "com.tct.onetouchbooster")):
+            version = _package_summary(_read(adb, ("shell", "dumpsys", "package", package))).get("versionCode")
+            if not version or not re.fullmatch(r"[1-9][0-9]*", version):
+                raise CompatibilityError("NATIVE_COMPONENT_VERSION_UNAVAILABLE")
+            versions[field] = version
+        digest = controller_sha256 or hashlib.sha256((ROOT / "nxtpaper_guard.sh").read_bytes()).hexdigest()
+        binding = build_runtime_binding(identity, keylayout=layout, keylayout_sha256=layout_hash,
+                                        keycodes=keycodes, versions=versions,
+                                        controller_sha256=digest, profiles=profiles, adapter=adapter)
+        state = "REQUIRED"
+        try:
+            approval = parse_qualification(_read(adb, ("shell", "cat", "/data/local/tmp/nxtpaper_guard.qualification"), strip=False))
+            state = "PASSED" if approval.matches(binding) else "STALE"
+        except CompatibilityError:
+            pass
+        return SupportAssessment("MAINTAINER_TESTED" if known else "EXPERIMENTAL_ELIGIBLE", (), binding, state)
+    except (CompatibilityError, OSError, ValueError, KeyError) as error:
+        # Do not leak raw ADB errors, paths, tokens, or settings into reports.
+        reason = str(error) if isinstance(error, CompatibilityError) and re.fullmatch(r"[A-Z_]+", str(error)) else "REQUIRED_EVIDENCE_UNAVAILABLE"
+        return SupportAssessment("UNSUPPORTED", (reason,), setup_state="UNAVAILABLE")
 
 
 def _read(adb, command, *, timeout=5, allow_empty=False, strip=True):
@@ -206,7 +493,7 @@ def _controller_observation(adb):
     try:
         marker = _read(adb, ("shell", "cat", "/data/local/tmp/nxtpaper_guard.version"))
         version, separator, digest = marker.partition(":")
-        if separator and re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", version) and HASH.fullmatch(digest):
+        if separator and re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9.]+)?", version) and HASH.fullmatch(digest):
             observed.update({"deployed_version": version, "marker_sha256": digest})
     except CompatibilityError:
         pass
@@ -229,6 +516,11 @@ def _controller_observation(adb):
     if marker_version == "1.0.5":
         observed["marker_hash_scheme"] = "script-NUL-profile"
         expected_marker = observed.get("local_bundle_sha256")
+    elif marker_version == "1.0.6-beta.1":
+        observed["marker_hash_scheme"] = "script"
+        # The runtime binding/qualification are checked independently; the
+        # Android status marker identifies this controller's source bytes.
+        expected_marker = observed.get("local_source_sha256")
     elif marker_version in {"1.0.0", "1.0.1", "1.0.2", "1.0.3", "1.0.4"}:
         observed["marker_hash_scheme"] = "legacy-script"
         expected_marker = observed.get("local_source_sha256")
@@ -328,6 +620,23 @@ def observe_compatibility(adb, profile=None):
         except CompatibilityError:
             observations["packages"][package] = {"availability": "unknown"}
     observations["controller"] = _controller_observation(adb)
+    public = assess_support(adb, profiles)
+    public_support = {
+        "level": public.support_level, "setup_state": public.setup_state,
+        "adapter_id": public.binding["adapter"] if public.binding else None,
+        "binding_sha256": public.binding.digest if public.binding else None,
+        "reasons": list(public.reasons),
+        "limit": "Historical model support, local setup, privilege and live protection are separate facts.",
+    }
+    if public.binding is not None:
+        public_support["control_mapping"] = {
+            key: public.binding[key] for key in ("adapter_revision", "linux_on", "linux_off", "enter_key", "exit_key",
+                                                 "keylayout", "keylayout_sha256", "systemui_version",
+                                                 "launcher_version", "manager_version")
+        }
+    if public.binding is not None:
+        action = ("Current recognized controls are eligible for guided setup. Complete or repeat the local phone test "
+                  "before enabling commitments; an unfamiliar build is experimental, not permanently rejected.")
     issues = []
     if observations["controller"]["differs_from_local_source"]:
         issues.append({"code": "CONTROLLER_SOURCE_MISMATCH",
@@ -336,6 +645,7 @@ def observe_compatibility(adb, profile=None):
         "schema": 1, "generated_utc": datetime.now(timezone.utc).isoformat(),
         "classification": classification, "profile_id": selected["id"] if selected else None,
         "identity": identity, "checks": checks, "recovery_action": action,
+        "public_support": public_support,
         "observations": observations, "issues": issues,
         "limits": ["Observation only; no phone state was changed.",
                    "VERIFIED means matching historical firmware qualification and current structural checks, not a new handset acceptance test.",

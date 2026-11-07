@@ -33,6 +33,11 @@ adb_path.txt
 *.aab
 *.jks
 *.keystore
+*.p12
+*.pfx
+signing.properties
+private-signing.properties*
+*PRIVATE*Release*Key*Backup*/
 device_screen.png
 current_phone_screen*.png
 dist/

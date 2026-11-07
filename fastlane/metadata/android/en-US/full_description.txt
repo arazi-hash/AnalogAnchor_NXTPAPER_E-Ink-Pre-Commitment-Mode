@@ -1,0 +1,9 @@
+Experimental pre-commitment for compatible TCL NXTPAPER phones with native Max Ink. Requires Shizuku and a successful on-device compatibility setup.
+
+Choose five minutes by default, or 2, 4, 6 or 12 hours. Early moves to Normal trigger native Max Ink recovery during a commitment. Emergency Stop waits five minutes or the earlier commitment end, then confirms native Normal restoration. Setup trials have immediate cancellation.
+
+The known reference is the NXTPAPER 70 Pro AMD9 firmware. Other phones and firmware remain experimental and are eligible only when their native slider protocol is recognized. A NXTPAPER button or installation success alone does not establish support. Push/cycle keys and display-only modes are not supported by this adapter.
+
+Reboot, lost Shizuku access or controller loss ends enforcement; active commitments are not recovered across those losses. System updates may require setup again. Operation is local. Reports are shared only when you choose to preview and share them.
+
+Privacy and permissions: https://github.com/arazi-hash/AnalogAnchor_NXTPAPER_E-Ink-Pre-Commitment-Mode/blob/codex/nxtpaper-demo/PRIVACY.md

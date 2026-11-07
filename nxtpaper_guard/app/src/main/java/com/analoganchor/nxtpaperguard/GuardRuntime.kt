@@ -6,6 +6,7 @@ import android.content.pm.PackageManager
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import android.view.KeyEvent
 import rikka.shizuku.Shizuku
 import rikka.shizuku.ShizukuRemoteProcess
 import java.util.concurrent.Executors
@@ -84,7 +85,7 @@ object GuardRuntime {
                     Action.START -> {
                         // Recheck the preference on this serialized queue: a queued reconnect must
                         // never undo a later explicit Stop from the user.
-                        if (generation == stopGeneration.get() && desired(app)) start() else status()
+                        if (generation == stopGeneration.get() && desired(app)) start(app) else status()
                     }
                     Action.STOP -> requestStop(app)
                     Action.CANCEL_STOP -> cancelStop(app)
@@ -93,7 +94,10 @@ object GuardRuntime {
                             requireGuard(duration != null && duration in GuardStatus.durations, R.string.error_duration_invalid)
                             val before = status()
                             requireGuard(before.phase != "UPDATE_REQUIRED", R.string.guard_update_required)
-                            if (before.phase == "STOPPED") deployController()
+                            if (before.phase == "STOPPED") {
+                                requireQualified(app)
+                                deployController()
+                            }
                             val configured = parse(shell("/system/bin/sh $SCRIPT set-duration $duration"))
                             if (configured.phase == "ERROR" && configured.errorCode?.startsWith("DURATION_") == true) {
                                 durationFeedback(context, context.getString(errorResource(configured.errorCode)))
@@ -102,6 +106,7 @@ object GuardRuntime {
                     }
                     Action.TEST_INK, Action.TEST_NORMAL -> {
                         requireGuard(!desired(app) && status().phase == "STOPPED", R.string.error_tests_guard_active)
+                        requireQualified(app)
                         val tested = compatibility(if (action == Action.TEST_INK) "test-ink" else "test-normal")
                         requireGuard(tested.commandSent, compatibilityError(tested))
                         status()
@@ -153,7 +158,10 @@ object GuardRuntime {
                 GuardCompatibility.Report(GuardCompatibility.Verdict.PRIVILEGE_UNAVAILABLE, "SHIZUKU_UNAVAILABLE")
             } else try {
                 loadController(app)
-                val observed = compatibility()
+                val assessed = assess(app)
+                val observed = GuardCompatibility.Report(
+                    if (assessed.eligible) GuardCompatibility.Verdict.VERIFIED else GuardCompatibility.Verdict.CAPABILITY_MISSING,
+                    assessed.reason, assessed.binding?.profileId)
                 val mismatch = shell("""
                     ${livePidCheck()}
                     if [ "${'$'}live" = 1 ] &&
@@ -254,8 +262,196 @@ object GuardRuntime {
         val profile = context.assets.open("nxtpaper_firmware.properties").use { it.readBytes() }
         asset = bytes
         profileAsset = profile
-        val digest = GuardCompatibility.controllerDigest(bytes, profile)
-        controllerId = "${BuildConfig.VERSION_NAME}:$digest"
+        controllerId = "${BuildConfig.VERSION_NAME}:${sha256(bytes)}"
+    }
+
+    enum class SetupAction { CHECK, STATUS, START, CONFIRM_NATIVE, ABORT, QUALIFY, RECOVER }
+    data class SetupSnapshot(val assessment: SupportAssessment? = null,
+        val trial: SetupTrialStatus = SetupTrialStatus("STOPPED"), val qualified: Boolean = false,
+        val controllerPresent: Boolean = false, val error: String? = null)
+    private const val SETUP_SCRIPT = "/data/local/tmp/nxtpaper_setup.sh"
+    private var latestAssessment: SupportAssessment? = null
+
+    /** Shares the controller queue; all trial progress itself belongs to the independent shell process. */
+    fun setupAsync(context: Context, action: SetupAction, callback: (SetupSnapshot) -> Unit) {
+        val app = context.applicationContext
+        executor.execute {
+            val result = try {
+                requireGuard(isAuthorized(), R.string.error_shizuku_not_ready)
+                loadController(app)
+                if (action == SetupAction.START) requireGuard(preferences(app).edit()
+                    .remove("qualification_binding").remove("qualification_controller").commit(), R.string.error_guard_preferences)
+                var assessment = if (action in setOf(SetupAction.ABORT, SetupAction.RECOVER)) latestAssessment ?: SupportAssessment(SupportAssessment.Level.UNSUPPORTED, "NOT_CHECKED")
+                    else if (action == SetupAction.STATUS && latestAssessment != null) latestAssessment!!
+                    else assess(app).also { latestAssessment = it }
+                var occupied = controllerPresent()
+                when (action) {
+                    SetupAction.RECOVER -> {
+                        // Execute only this APK's implementation. The installed canonical script may belong to an unknown version.
+                        var recovered = runCatching { parse(shell("/system/bin/sh -s reset-stale", requireNotNull(asset))) }.getOrNull()
+                        if (recovered?.phase != "STOPPED" && knownSetupScript(app) && trialStatus(app).phase == "FAILED") {
+                            val trialReset = runCatching {
+                                SetupTrialStatus.parse(shell("/system/bin/sh $SETUP_SCRIPT reset-stale"))
+                            }.getOrNull()
+                            if (trialReset?.phase == "STOPPED") recovered = runCatching {
+                                parse(shell("/system/bin/sh -s reset-stale", requireNotNull(asset)))
+                            }.getOrNull()
+                        }
+                        requireGuard(recovered?.phase == "STOPPED", R.string.setup_recovery_refused)
+                        occupied = controllerPresent()
+                        requireGuard(!occupied, R.string.setup_recovery_refused)
+                        assessment = assess(app).also { latestAssessment = it }
+                    }
+                    SetupAction.START -> {
+                        requireGuard(assessment.eligible, R.string.setup_unsupported)
+                        val previous = trialStatus(app)
+                        requireGuard(!previous.active && previous.phase != "UNKNOWN", R.string.setup_busy)
+                        if (previous.phase == "FAILED" && knownSetupScript(app)) {
+                            val reset = SetupTrialStatus.parse(shell("/system/bin/sh $SETUP_SCRIPT reset-stale"))
+                            requireGuard(reset.phase == "STOPPED", R.string.setup_busy)
+                            occupied = controllerPresent()
+                        }
+                        requireGuard(!occupied && !desired(app), R.string.setup_busy)
+                        val binding = requireNotNull(assessment.binding)
+                        profileAsset = binding.text.toByteArray(Charsets.UTF_8)
+                        deployFiles(mapOf(PROFILE to requireNotNull(profileAsset), SCRIPT to requireNotNull(asset),
+                            SETUP_SCRIPT to app.assets.open("nxtpaper_setup.sh").use { it.readBytes() }))
+                        shell("printf '%s' '$controllerId' > $VERSION")
+                        shell("nohup /system/bin/sh $SETUP_SCRIPT start > /data/local/tmp/nxtpaper_setup.start.log 2>&1 < /dev/null &")
+                        Thread.sleep(600)
+                    }
+                    SetupAction.CONFIRM_NATIVE -> {
+                        requireGuard(!occupied, R.string.setup_busy)
+                        requireGuard(trialStatus(app).phase == "WAIT_OWNER_CONFIRM", R.string.setup_incomplete)
+                        shell("/system/bin/sh $SETUP_SCRIPT confirm-native")
+                    }
+                    SetupAction.ABORT -> {
+                        // Abort uses the frozen, already recognised trial implementation, even if fresh checks fail.
+                        requireGuard(knownSetupScript(app), R.string.setup_incomplete)
+                        shell("/system/bin/sh $SETUP_SCRIPT abort", timeoutSeconds = 55)
+                    }
+                    SetupAction.QUALIFY -> {
+                        requireGuard(assessment.eligible && !occupied, R.string.setup_incomplete)
+                        val before = trialStatus(app)
+                        val binding = requireNotNull(assessment.binding)
+                        requireGuard(before.phase == "PASSED" && before.bindingDigest == binding.digest, R.string.setup_incomplete)
+                        val qualified = SetupTrialStatus.parse(shell("/system/bin/sh $SETUP_SCRIPT qualify"))
+                        requireGuard(qualified.phase == "QUALIFIED" && qualified.bindingDigest == binding.digest && centralQualified(binding), R.string.setup_incomplete)
+                        requireGuard(preferences(app).edit().putString("qualification_binding", binding.digest)
+                            .putString("qualification_controller", binding.controllerDigest).commit(), R.string.error_guard_preferences)
+                    }
+                    SetupAction.CHECK, SetupAction.STATUS -> Unit
+                }
+                val binding = assessment.binding
+                val qualified = binding != null && localQualified(app, binding) && centralQualified(binding)
+                if (action != SetupAction.STATUS && !qualified) preferences(app).edit()
+                    .remove("qualification_binding").remove("qualification_controller").apply()
+                SetupSnapshot(assessment, trialStatus(app), qualified, occupied)
+            } catch (e: GuardFailure) {
+                SetupSnapshot(latestAssessment, runCatching { trialStatus(app) }.getOrDefault(SetupTrialStatus("UNKNOWN")),
+                    error = context.getString(e.stringId))
+            } catch (e: Exception) {
+                Log.w("GuardRuntime", "Setup observation unavailable", e)
+                val failed = SupportAssessment(SupportAssessment.Level.UNSUPPORTED, "PROBE_UNAVAILABLE", facts = latestAssessment?.facts.orEmpty())
+                latestAssessment = failed
+                SetupSnapshot(failed, SetupTrialStatus("UNKNOWN"), error = context.getString(R.string.setup_incomplete))
+            }
+            main.post { callback(result) }
+        }
+    }
+
+    private fun localQualified(context: Context, binding: NativeBinding): Boolean {
+        val saved = preferences(context)
+        return DeviceQualification(saved.getString("qualification_binding", "").orEmpty(),
+            saved.getString("qualification_controller", "").orEmpty(), true).matches(binding.digest, binding.controllerDigest)
+    }
+
+    private fun centralQualified(binding: NativeBinding): Boolean {
+        val text = shell("cat /data/local/tmp/nxtpaper_guard.qualification 2>/dev/null || true")
+        val record = runCatching { parseData(text) }.getOrNull() ?: return false
+        return record.keys == setOf("schema", "binding_sha256", "controller_sha256", "trial_id", "owner_confirmed", "result") &&
+            record["schema"] == "1" && record["binding_sha256"] == binding.digest &&
+            record["controller_sha256"] == binding.controllerDigest && record["owner_confirmed"] == "1" &&
+            record["result"] == "passed" && record["trial_id"]?.matches(Regex("[A-Za-z0-9_-]+")) == true
+    }
+
+    private fun requireQualified(context: Context) {
+        val assessment = assess(context).also { latestAssessment = it }
+        val binding = assessment.binding
+        val valid = binding != null && assessment.eligible && localQualified(context, binding) && centralQualified(binding)
+        if (!valid) preferences(context).edit().remove("qualification_binding").remove("qualification_controller").apply()
+        requireGuard(valid, R.string.setup_required)
+        profileAsset = requireNotNull(binding).text.toByteArray(Charsets.UTF_8)
+    }
+
+    private fun controllerPresent(): Boolean = shell("""
+        ${livePidCheck()}
+        if [ "${'$'}live" = 1 ] || [ -d $LOCK_DIR ] || [ -d /data/local/tmp/nxtpaper_guard.operation.lock ]; then printf busy; fi
+    """.trimIndent()).isNotEmpty()
+
+    private fun knownSetupScript(context: Context): Boolean {
+        val expected = sha256(context.assets.open("nxtpaper_setup.sh").use { it.readBytes() })
+        return shell("sha256sum $SETUP_SCRIPT 2>/dev/null | cut -d ' ' -f 1 || true") == expected &&
+            shell("sha256sum $SCRIPT 2>/dev/null | cut -d ' ' -f 1 || true") == sha256(requireNotNull(asset))
+    }
+
+    private fun trialStatus(context: Context): SetupTrialStatus {
+        if (knownSetupScript(context)) return SetupTrialStatus.parse(shell("/system/bin/sh $SETUP_SCRIPT status"))
+        val evidence = shell("if [ -e /data/local/tmp/nxtpaper_setup.pid ] || [ -d /data/local/tmp/nxtpaper_setup.lock ]; then printf busy; fi")
+        return SetupTrialStatus(if (evidence.isEmpty()) "STOPPED" else "UNKNOWN")
+    }
+
+    private fun assess(context: Context): SupportAssessment {
+        val adapter = NativeAdapter.parse(context.assets.open("compatibility/adapters/tcl-slider-v1.properties").bufferedReader().use { it.readText() })
+        val registry = requireNotNull(context.assets.list("compatibility/profiles")).filter { it.endsWith(".properties") }.map {
+            SupportAssessmentEngine.parseRegistry(context.assets.open("compatibility/profiles/$it").bufferedReader().use { reader -> reader.readText() })
+        }
+        val identity = mapOf("model" to "ro.product.model", "device" to "ro.product.device", "android" to "ro.build.version.release",
+            "sdk" to "ro.build.version.sdk", "fingerprint" to "ro.build.fingerprint").mapValues { shell("getprop ${it.value}") }
+        val features = shell("pm list features", outputLimit = 65536).lineSequence().toSet()
+        val caps = shell("getevent -lp", outputLimit = 524288)
+        val input = shell("dumpsys input", outputLimit = 524288)
+        val node = runCatching { SupportAssessmentEngine.discoverInput(caps) }.getOrDefault("")
+        val readableRawInput = node.isNotEmpty() && shell("if [ -r '$node' ]; then printf readable; fi") == "readable"
+        val layout = runCatching { SupportAssessmentEngine.activeLayout(input, node) }.getOrDefault("")
+        val layoutText = if (layout.isNotEmpty()) shell("cat '$layout'", outputLimit = 262144) else ""
+        val layoutDigest = if (layout.isNotEmpty()) shell("sha256sum '$layout' | cut -d ' ' -f 1") else ""
+        val settings = adapter.values.filterKeys { it.endsWith("_key") }.values.joinToString("\n") { key ->
+            "$key=" + shell("settings get secure $key")
+        }
+        val versions = mapOf("systemui_version" to "com.android.systemui", "launcher_version" to "com.tcl.android.launcher",
+            "manager_version" to "com.tct.onetouchbooster").mapValues { (_, pkg) ->
+            shell("dumpsys package $pkg | sed -n 's/^.*versionCode=\\([0-9][0-9]*\\).*$/\\1/p' | head -n 1")
+        }
+        val keys = runCatching {
+            val on = KeyEvent.keyCodeFromString("KEYCODE_TSWT_ON")
+            val off = KeyEvent.keyCodeFromString("KEYCODE_TSWT_OFF")
+            RuntimeKeyPair(on, off, KeyEvent.keyCodeToString(on), KeyEvent.keyCodeToString(off))
+        }.getOrDefault(RuntimeKeyPair(0, 0, "", ""))
+        return SupportAssessmentEngine.assess(adapter, registry, SupportAssessmentEngine.Observations(identity,
+            shell("getprop ro.product.manufacturer"), features.any { it == "feature:vendor.software.support.tcl_switch" ||
+                it.startsWith("feature:vendor.software.support.tcl_switch=") }, features.any { it == "feature:android.hardware.telephony" ||
+                it.startsWith("feature:android.hardware.telephony=") }, settings, caps, input, layout, layoutText, layoutDigest, versions, keys,
+            readableRawInput, shell("getprop sys.tct.support_ui_switch_button")), sha256(requireNotNull(asset)))
+    }
+
+    /** Hold the same shell mutex used by both controllers while replacing stopped files. */
+    private fun deployFiles(files: Map<String, ByteArray>) {
+        val writes = files.entries.joinToString("\n") { (path, bytes) ->
+            val encoded = android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP)
+            val mode = if (path == PROFILE) "600" else "700"
+            "printf '%s' '$encoded' | base64 -d > $path.pending && chmod $mode $path.pending && mv $path.pending $path || exit 1"
+        }
+        shell("""
+            mkdir /data/local/tmp/nxtpaper_guard.operation.lock || exit 1
+            trap 'rm -f /data/local/tmp/nxtpaper_guard.operation.lock/boot; rmdir /data/local/tmp/nxtpaper_guard.operation.lock' EXIT
+            operation_boot=${'$'}(cat /proc/sys/kernel/random/boot_id) || exit 1
+            case "${'$'}operation_boot" in ''|*[!a-zA-Z0-9-]*) exit 1 ;; esac
+            printf '%s\n' "${'$'}operation_boot" > /data/local/tmp/nxtpaper_guard.operation.lock/boot || exit 1
+            ${livePidCheck()}
+            [ "${'$'}live" = 0 ] && [ ! -d $LOCK_DIR ] && [ ! -e /data/local/tmp/nxtpaper_setup.pid ] && [ ! -d /data/local/tmp/nxtpaper_setup.lock ] || exit 1
+            $writes
+        """.trimIndent(), timeoutSeconds = 20)
     }
 
     private fun status(): Result {
@@ -276,7 +472,7 @@ object GuardRuntime {
         return parse(output)
     }
 
-    private fun start(): Result {
+    private fun start(context: Context): Result {
         val previous = status()
         if (previous.phase == "INITIALIZING") return awaitReady()
         if (previous.phase !in setOf("STOPPED", "UPDATE_REQUIRED", "ERROR")) {
@@ -287,13 +483,9 @@ object GuardRuntime {
         if (previous.phase == "UPDATE_REQUIRED") return previous
         if (previous.phase == "ERROR") {
             val live = shell("${livePidCheck()}\nprintf '%s' \"${'$'}live\"")
-            if (live == "1") {
-                val stopped = parse(shell("/system/bin/sh $SCRIPT stop", timeoutSeconds = 60))
-                requireGuard(stopped.phase == "STOPPED", R.string.error_stop_before_retry)
-            } else {
-                shell("rm -f $STATE_FILE $PID /data/local/tmp/nxtpaper_guard.start.log; rm -rf /data/local/tmp/nxtpaper_guard.lock")
-            }
+            requireGuard(live != "1", R.string.error_stop_before_retry)
         }
+        requireQualified(context)
         val checked = compatibility()
         requireGuard(checked.verdict == GuardCompatibility.Verdict.VERIFIED, compatibilityError(checked))
         deployController()
@@ -304,9 +496,8 @@ object GuardRuntime {
     private fun deployController() {
         // Recheck at deployment, not just the earlier UI/status sample. Never replace a live daemon.
         requireGuard(shell("${livePidCheck()}\nprintf '%s' \"${'$'}live\"") != "1", R.string.error_stop_before_retry)
-        // Write the asset through stdin. Shell cannot read the app's private files.
-        shell("cat > $PROFILE.pending && chmod 600 $PROFILE.pending && mv $PROFILE.pending $PROFILE", profileAsset)
-        shell("cat > $SCRIPT.pending && chmod 700 $SCRIPT.pending && mv $SCRIPT.pending $SCRIPT", asset)
+        requireGuard(shell("if [ -e /data/local/tmp/nxtpaper_setup.pid ] || [ -d /data/local/tmp/nxtpaper_setup.lock ]; then printf busy; fi").isEmpty(), R.string.setup_busy)
+        deployFiles(mapOf(PROFILE to requireNotNull(profileAsset), SCRIPT to requireNotNull(asset)))
         shell("printf '%s' '$controllerId' > $VERSION")
     }
 
@@ -453,7 +644,7 @@ object GuardRuntime {
 
     // The pinned Shizuku 13.1.5 exposes this legacy bridge. All process work stays
     // off the main thread and is bounded; callers never report success from nohup alone.
-    private fun shell(command: String, stdin: ByteArray? = null, timeoutSeconds: Long = 35): String {
+    private fun shell(command: String, stdin: ByteArray? = null, timeoutSeconds: Long = 35, outputLimit: Int = 8192): String {
         val method = Shizuku::class.java.getDeclaredMethod(
             "newProcess", Array<String>::class.java, Array<String>::class.java, String::class.java
         ).apply { isAccessible = true }
@@ -461,7 +652,7 @@ object GuardRuntime {
         val stdout = StringBuilder()
         val stderr = StringBuilder()
         val outReader = Thread { runCatching { process.inputStream.bufferedReader().use { reader ->
-            reader.forEachLine { if (stdout.length < 8192) stdout.appendLine(it) }
+            reader.forEachLine { if (stdout.length < outputLimit) stdout.appendLine(it) }
         } } }
         val errReader = Thread { runCatching { process.errorStream.bufferedReader().use { reader ->
             reader.forEachLine { if (stderr.length < 8192) stderr.appendLine(it) }

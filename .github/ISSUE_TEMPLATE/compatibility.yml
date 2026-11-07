@@ -1,0 +1,44 @@
+name: NXTPAPER compatibility report
+description: Report guided setup results for a model or firmware
+title: "[Compatibility] Model and firmware"
+labels: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Preview the app's report before sharing. Do not include serial numbers,
+        account details, selected app names, private keys, or raw device dumps.
+        A report does not automatically qualify every device of the same model.
+  - type: input
+    id: app_version
+    attributes:
+      label: App version
+    validations:
+      required: true
+  - type: input
+    id: phone
+    attributes:
+      label: Phone model and Android version
+    validations:
+      required: true
+  - type: dropdown
+    id: result
+    attributes:
+      label: Guided setup result
+      options:
+        - Passed on this phone
+        - Not eligible or unsupported
+        - Incomplete or failed
+        - Could not start Shizuku
+    validations:
+      required: true
+  - type: textarea
+    id: report
+    attributes:
+      label: Redacted report from Preview / Share
+      render: text
+  - type: textarea
+    id: native_experience
+    attributes:
+      label: What happened on the phone?
+      description: Describe native Max Ink, physical key behavior and return to Normal. Do not post personal app lists.

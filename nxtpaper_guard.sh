@@ -33,6 +33,11 @@ DEFAULT_DURATION=300
 EXIT_DELAY=300
 PROFILE_FILE=$BASE.profile
 PROFILE_LOADED=0
+QUALIFICATION_FILE=$BASE.qualification
+OPERATION_LOCK=$BASE.operation.lock
+SETUP_PID_FILE=/data/local/tmp/nxtpaper_setup.pid
+SETUP_LOCK_DIR=/data/local/tmp/nxtpaper_setup.lock
+SETUP_SCRIPT_PATH=/data/local/tmp/nxtpaper_setup.sh
 
 # Parse reviewed data, never source/eval it. Schema 1 fixes the native protocol;
 # another build may reuse it only after its own qualification and source review.
@@ -45,35 +50,198 @@ guard_profile_load() {
     fi
     profile_record=$(printf '%s\n' "$profile_text" | awk -F= '
       BEGIN {
-        n=split("schema id qualification model device android sdk fingerprint input_name linux_on linux_off raw_on raw_off keylayout layout_on layout_off enter_key exit_key tswt_key ink_key book_key applying_key animation_key preset_key preset immediate_key immediate evidence", keys, " ");
-        for (i=1;i<=n;i++) allowed[keys[i]]=1;
-        split("schema=1 qualification=verified input_name=tswt linux_on=592 linux_off=593 raw_on=KEY_BRIGHTNESS_MIN raw_off=KEY_BRIGHTNESS_MAX keylayout=/system/usr/keylayout/Generic.kl layout_on=TSWT_ON layout_off=TSWT_OFF enter_key=343 exit_key=344 tswt_key=TSWT_state ink_key=nxtpaper_ink_style_state book_key=nxtpaper_book_style_state applying_key=nxtpaper_is_applying_theme animation_key=nxtpaper_animation_state preset_key=tct_nxtpaper_mode_select preset=3 immediate_key=tct_nxtpaper_switch_imm immediate=1", fixed, " ");
-        for (i in fixed) { split(fixed[i], pair, "="); expected[pair[1]]=pair[2] }
+        base="schema id qualification model device android sdk fingerprint input_name linux_on linux_off raw_on raw_off keylayout layout_on layout_off enter_key exit_key tswt_key ink_key book_key applying_key animation_key preset_key preset immediate_key immediate evidence";
+        extra="adapter adapter_revision keylayout_sha256 systemui_version launcher_version manager_version controller_sha256";
+        baseCount=split(base,baseKeys," ");
+        n=split(base " " extra,keys," "); for (i=1;i<=n;i++) allowed[keys[i]]=1;
+        split("input_name=tswt linux_on=592 linux_off=593 raw_on=KEY_BRIGHTNESS_MIN raw_off=KEY_BRIGHTNESS_MAX layout_on=TSWT_ON layout_off=TSWT_OFF tswt_key=TSWT_state ink_key=nxtpaper_ink_style_state book_key=nxtpaper_book_style_state applying_key=nxtpaper_is_applying_theme animation_key=nxtpaper_animation_state preset_key=tct_nxtpaper_mode_select preset=3 immediate_key=tct_nxtpaper_switch_imm immediate=1",fixed," ");
+        for(i in fixed) { split(fixed[i],pair,"="); expected[pair[1]]=pair[2] }
       }
-      { if (index($0,"\r")) bad=1 }
+      { if(index($0,"\r")) bad=1 }
       /^#/ || /^$/ { next }
-      { if (NF!=2 || !allowed[$1] || seen[$1]++ || $2!~/^[A-Za-z0-9_.\/:+-]+$/) bad=1; value[$1]=$2 }
+      { if(NF!=2 || !allowed[$1] || seen[$1]++ || $2!~/^[A-Za-z0-9_.\/:+-]+$/) bad=1; value[$1]=$2 }
       END {
-        for (i=1;i<=n;i++) if (!seen[keys[i]]) bad=1;
-        for (k in expected) if (value[k]!=expected[k]) bad=1;
-        if (value["id"]!~/^[a-z0-9]+(-[a-z0-9]+)*$/ ||
-            value["model"]!~/^[A-Za-z0-9_-]+$/ || value["device"]!~/^[A-Za-z0-9_-]+$/ ||
-            value["android"]!~/^[1-9][0-9]*$/ || value["sdk"]!~/^[1-9][0-9]*$/ ||
-            index(value["fingerprint"],":")==0 || index(value["fingerprint"],"/")==0 ||
-            index(value["evidence"],"..") || value["evidence"]~/^\//) bad=1;
-        if (bad) exit 1;
-        for (i=1;i<=n;i++) printf "%s%s",value[keys[i]],(i==n ? "\n" : " ");
+        if(value["schema"]=="1") {
+          limit=baseCount;
+          for(i=baseCount+1;i<=n;i++) if(seen[keys[i]]) bad=1;
+          if(value["qualification"]!="verified" || value["keylayout"]!="/system/usr/keylayout/Generic.kl" || value["enter_key"]!="343" || value["exit_key"]!="344") bad=1;
+        } else if(value["schema"]=="2") {
+          limit=n;
+          if((value["qualification"]!="maintainer-tested" && value["qualification"]!="experimental") || value["adapter"]!="tcl-slider-v1" || value["adapter_revision"]!="1") bad=1;
+          if(value["keylayout"]!~/^\/(system|vendor|product|odm|system_ext)\/usr\/keylayout\/[A-Za-z0-9_.+-]+\.kl$/ || index(value["keylayout"],"..")) bad=1;
+          if(value["enter_key"]!~/^[1-9][0-9]*$/ || value["exit_key"]!~/^[1-9][0-9]*$/ || value["enter_key"]==value["exit_key"] || value["enter_key"]+0>32767 || value["exit_key"]+0>32767) bad=1;
+          split("keylayout_sha256 controller_sha256", hashes," ");
+          for(i in hashes) if(value[hashes[i]]!~/^[a-f0-9]+$/ || length(value[hashes[i]])!=64) bad=1;
+          split("systemui_version launcher_version manager_version", versions," ");
+          for(i in versions) if(value[versions[i]]!~/^[1-9][0-9]*$/) bad=1;
+        } else { limit=0; bad=1 }
+        for(i=1;i<=limit;i++) if(!seen[keys[i]]) bad=1;
+        for(k in expected) if(value[k]!=expected[k]) bad=1;
+        if(value["id"]!~/^[a-z0-9]+(-[a-z0-9]+)*$/ || value["model"]!~/^[A-Za-z0-9_-]+$/ || value["device"]!~/^[A-Za-z0-9_-]+$/ || value["android"]!~/^[1-9][0-9]*$/ || value["sdk"]!~/^[1-9][0-9]*$/ || index(value["fingerprint"],":")==0 || index(value["fingerprint"],"/")==0 || index(value["evidence"],"..") || value["evidence"]~/^\//) bad=1;
+        if(bad) exit 1;
+        for(i=1;i<=n;i++) printf "%s%s",(value[keys[i]]=="" ? "-" : value[keys[i]]),(i==n ? "\n" : " ");
       }') || return 1
     read -r PROFILE_SCHEMA PROFILE_ID PROFILE_QUALIFICATION PROFILE_MODEL PROFILE_DEVICE \
         PROFILE_ANDROID PROFILE_SDK PROFILE_FINGERPRINT PROFILE_INPUT_NAME PROFILE_LINUX_ON \
         PROFILE_LINUX_OFF PROFILE_RAW_ON PROFILE_RAW_OFF PROFILE_KEYLAYOUT PROFILE_LAYOUT_ON \
         PROFILE_LAYOUT_OFF PROFILE_ENTER_KEY PROFILE_EXIT_KEY PROFILE_TSWT_KEY PROFILE_INK_KEY \
         PROFILE_BOOK_KEY PROFILE_APPLYING_KEY PROFILE_ANIMATION_KEY PROFILE_PRESET_KEY \
-        PROFILE_PRESET PROFILE_IMMEDIATE_KEY PROFILE_IMMEDIATE PROFILE_EVIDENCE <<EOF
+        PROFILE_PRESET PROFILE_IMMEDIATE_KEY PROFILE_IMMEDIATE PROFILE_EVIDENCE PROFILE_ADAPTER \
+        PROFILE_ADAPTER_REVISION PROFILE_KEYLAYOUT_SHA PROFILE_SYSTEMUI_VERSION PROFILE_LAUNCHER_VERSION \
+        PROFILE_MANAGER_VERSION PROFILE_CONTROLLER_SHA <<EOF
 $profile_record
 EOF
+    if [ "$PROFILE_SCHEMA" = 2 ]; then
+        # Consumers generate sorted LF bindings. Hash canonical data rather
+        # than comments/order so Android, PC and this controller agree.
+        PROFILE_BINDING_SHA=$(printf '%s\n' "$profile_text" | awk -F= '!/^#/ && !/^$/ { print $1 "=" $2 }' | LC_ALL=C sort | sha256sum) || return 1
+        PROFILE_BINDING_SHA=${PROFILE_BINDING_SHA%% *}
+        KEYLAYOUT_PATH=$PROFILE_KEYLAYOUT
+    fi
     PROFILE_LOADED=1
     unset profile_text profile_record
+}
+
+guard_package_version() {
+    dumpsys package "$1" 2>/dev/null | awk '/versionCode=/ { v=$0; sub(/^.*versionCode=/,"",v); sub(/[[:space:]].*$/,"",v); if(v~/^[0-9]+$/) { print v; exit } }'
+}
+
+guard_active_layout() {
+    dumpsys input 2>/dev/null | awk -v node="$SWITCH_NODE" '
+      /^[[:space:]]+[0-9]+:[[:space:]]/ {
+        active=($0~/^[[:space:]]+[0-9]+:[[:space:]]+tswt[[:space:]]*$/);
+        if(active) count++;
+      }
+      active && /^[[:space:]]*Path:/ { path=$2 }
+      active && /^[[:space:]]*KeyLayoutFile:/ { layout=$2 }
+      END { if(count!=1 || path!=node || layout=="") exit 1; print layout }'
+}
+
+guard_symbols_match() {
+    # AMD9 is the only reviewed pinned fallback. Unknown builds must resolve
+    # both symbols from their running framework, never from guessed numbers.
+    if [ "$PROFILE_MODEL" = T807D ] && [ "$PROFILE_DEVICE" = Frida ] &&
+        [ "$PROFILE_FINGERPRINT" = 'TCL/T807D_EEA/Frida:16/BP2A.250605.031.A3/AMD9:user/release-keys' ]; then
+        [ "$PROFILE_QUALIFICATION" = maintainer-tested ] &&
+            [ "$PROFILE_ENTER_KEY" = 343 ] && [ "$PROFILE_EXIT_KEY" = 344 ]
+        return $?
+    fi
+    symbols_apk=${NXTPAPER_SYMBOL_APK:-}
+    [ -n "$symbols_apk" ] || symbols_apk=$(pm path com.analoganchor.nxtpaperguard 2>/dev/null | sed -n 's/^package://p' | head -n 1)
+    case "$symbols_apk" in /data/app/*/base.apk|/system/*/*.apk) ;; *) return 1 ;; esac
+    symbols_output=$(CLASSPATH="$symbols_apk" app_process / com.analoganchor.nxtpaperguard.KeySymbolProbe 2>/dev/null) || return 1
+    printf '%s\n' "$symbols_output" | awk -F= -v on="$PROFILE_ENTER_KEY" -v off="$PROFILE_EXIT_KEY" '
+      { if(NF!=2 || seen[$1]++) bad=1; v[$1]=$2; n++ }
+      END { if(bad || n!=6 || v["symbol_on"]!="KEYCODE_TSWT_ON" || v["resolved_on"]!="KEYCODE_TSWT_ON" || v["symbol_off"]!="KEYCODE_TSWT_OFF" || v["resolved_off"]!="KEYCODE_TSWT_OFF" || v["enter_key"]!=on || v["exit_key"]!=off) exit 1 }'
+}
+
+guard_binding_matches() {
+    [ "$PROFILE_SCHEMA" = 2 ] || return 0
+    # TCL's push/cycling-key path is a different native protocol.
+    binding_push=$(getprop sys.tct.support_ui_switch_button 2>/dev/null) || return 1
+    case "$binding_push" in ''|0|false) ;; *) return 1 ;; esac
+    pm list features 2>/dev/null | grep -Eq '^feature:vendor\.software\.support\.tcl_switch(=[0-9]+)?$' || return 1
+    guard_discover || return 1
+    binding_layout=$(guard_active_layout) || return 1
+    [ "$binding_layout" = "$PROFILE_KEYLAYOUT" ] || return 1
+    binding_hash=$(sha256sum "$KEYLAYOUT_PATH" 2>/dev/null) || return 1
+    [ "${binding_hash%% *}" = "$PROFILE_KEYLAYOUT_SHA" ] || return 1
+    [ "$(guard_package_version com.android.systemui)" = "$PROFILE_SYSTEMUI_VERSION" ] &&
+        [ "$(guard_package_version com.tcl.android.launcher)" = "$PROFILE_LAUNCHER_VERSION" ] &&
+        [ "$(guard_package_version com.tct.onetouchbooster)" = "$PROFILE_MANAGER_VERSION" ] || return 1
+    guard_symbols_match
+}
+
+guard_qualification_matches() {
+    [ "$PROFILE_SCHEMA" = 2 ] || return 0
+    [ -r "$QUALIFICATION_FILE" ] || return 1
+    awk -F= -v binding="$PROFILE_BINDING_SHA" -v controller="$PROFILE_CONTROLLER_SHA" '
+      { if(NF!=2 || seen[$1]++) bad=1; v[$1]=$2; n++ }
+      END { if(bad || n!=6 || v["schema"]!="1" || v["binding_sha256"]!=binding || v["controller_sha256"]!=controller || v["result"]!="passed" || v["owner_confirmed"]!="1" || v["trial_id"]!~/^[1-9][0-9]*-[0-9]+-[0-9]+$/) exit 1 }' "$QUALIFICATION_FILE"
+}
+
+guard_operation_acquire() {
+    mkdir "$OPERATION_LOCK" 2>/dev/null || return 1
+    OWN_OPERATION_LOCK=1
+    operation_boot=$(guard_duration_boot) || { guard_operation_release; return 1; }
+    case "$operation_boot" in ''|*[!a-zA-Z0-9-]*) guard_operation_release; return 1 ;; esac
+    printf '%s\n' "$operation_boot" > "$OPERATION_LOCK/boot" || { guard_operation_release; return 1; }
+}
+
+guard_operation_release() {
+    [ "${OWN_OPERATION_LOCK:-0}" = 1 ] || return 0
+    rm -f "$OPERATION_LOCK/boot"
+    rmdir "$OPERATION_LOCK" 2>/dev/null
+    OWN_OPERATION_LOCK=0
+}
+
+guard_operation_recover_previous_boot() {
+    [ -d "$OPERATION_LOCK" ] || return 0
+    recovery_boot=$(guard_duration_boot) || return 1
+    case "$recovery_boot" in ''|*[!a-zA-Z0-9-]*) return 1 ;; esac
+    # Claim within the still-existing directory, then reread its identity.
+    # A concurrent reset may have removed/recreated the parent after an older
+    # observation. Never unlink the boot record of that new current owner.
+    mkdir "$OPERATION_LOCK/recovery.claim" 2>/dev/null || return 1
+    recovery_owner=$(cat "$OPERATION_LOCK/boot" 2>/dev/null)
+    case "$recovery_owner" in
+      ''|*[!a-zA-Z0-9-]*) rmdir "$OPERATION_LOCK/recovery.claim" 2>/dev/null; return 1 ;;
+    esac
+    if [ "$recovery_owner" = "$recovery_boot" ]; then
+        rmdir "$OPERATION_LOCK/recovery.claim" 2>/dev/null; return 1
+    fi
+    rm -f "$OPERATION_LOCK/boot"
+    rmdir "$OPERATION_LOCK/recovery.claim" 2>/dev/null || return 1
+    rmdir "$OPERATION_LOCK" 2>/dev/null
+}
+
+guard_reset_reply() {
+    if [ -z "$1" ]; then printf 'STOPPED:0:0:0:0:UNKNOWN::300:0:0\n'
+    else printf 'ERROR:0:0:0:0:UNKNOWN:%s:300:0:0\n' "$1"; fi
+}
+
+guard_previous_boot_record() {
+    previous_record=$(cat "$1" 2>/dev/null) || return 1
+    printf '%s\n' "$previous_record" | grep -Eq '^[1-9][0-9]*:[0-9]+:[a-zA-Z0-9-]+$' || return 1
+    [ "${previous_record##*:}" != "$2" ]
+}
+
+guard_reset_stale() {
+    reset_current_boot=$(guard_duration_boot) || { guard_reset_reply BOOT_ID_UNAVAILABLE; return 1; }
+    case "$reset_current_boot" in ''|*[!a-zA-Z0-9-]*) guard_reset_reply BOOT_ID_UNAVAILABLE; return 1 ;; esac
+    # An active or ambiguous trial could still be restoring Normal. A guard
+    # with a same-boot, malformed or missing identity is equally untouchable.
+    guard_setup_absent || { guard_reset_reply SETUP_IN_PROGRESS; return 1; }
+    if [ -e "$PID_FILE" ] || [ -d "$LOCK_DIR" ]; then
+        guard_previous_boot_record "$PID_FILE" "$reset_current_boot" || { guard_reset_reply CONTROLLER_IDENTITY_UNAVAILABLE; return 1; }
+    fi
+    guard_operation_recover_previous_boot || { guard_reset_reply OPERATION_BUSY; return 1; }
+    guard_operation_acquire || { guard_reset_reply OPERATION_BUSY; return 1; }
+    guard_setup_absent || { guard_operation_release; guard_reset_reply SETUP_IN_PROGRESS; return 1; }
+    if [ ! -e "$PID_FILE" ] && [ ! -d "$LOCK_DIR" ]; then
+        guard_operation_release; guard_reset_reply ''; return 0
+    fi
+    # Recheck under the mutex: another operation may have won before acquire.
+    guard_previous_boot_record "$PID_FILE" "$reset_current_boot" || {
+        guard_operation_release; guard_reset_reply CONTROLLER_IDENTITY_UNAVAILABLE; return 1;
+    }
+    # No signals and no native commands. Only names owned by the old monitor
+    # are removed. Unrecognized lock contents retain the old identity evidence.
+    rm -f "$LOCK_DIR/input.fifo" "$PHYSICAL_FILE" "$PHYSICAL_FILE.tmp" \
+        "$GETEVENT_PID_FILE" "$GETEVENT_PID_FILE.tmp" "$READER_PID_FILE" \
+        "$READER_PID_FILE.tmp" "$WRITER_PID_FILE" "$WRITER_PID_FILE.tmp" "$MONITOR_ERROR_FILE"
+    if [ -d "$LOCK_DIR" ] && ! rmdir "$LOCK_DIR" 2>/dev/null; then
+        guard_operation_release; guard_reset_reply CONTROLLER_LOCK_UNRECOGNIZED; return 1
+    fi
+    rm -f "$PID_FILE"
+    guard_operation_release
+    guard_reset_reply ''
+}
+
+guard_setup_absent() {
+    # A failed read is not permission to replace a trial that may still be
+    # restoring Normal. The setup runner removes its own identity on exit.
+    [ ! -e "$SETUP_PID_FILE" ] && [ ! -d "$SETUP_LOCK_DIR" ]
 }
 
 guard_identity_matches() {
@@ -87,6 +255,8 @@ guard_identity_matches() {
         [ "$(getprop ro.build.version.release)" = "$PROFILE_ANDROID" ] &&
         [ "$(getprop ro.build.version.sdk)" = "$PROFILE_SDK" ] &&
         [ "$(getprop ro.build.fingerprint)" = "$PROFILE_FINGERPRINT" ] || return 1
+    COMPAT_VERDICT=CAPABILITY_MISSING; COMPAT_REASON=BOUND_CAPABILITY_CHANGED
+    guard_binding_matches || return 1
     COMPAT_VERDICT=VERIFIED; COMPAT_REASON=$PROFILE_ID
 }
 
@@ -119,8 +289,14 @@ guard_compatibility_report() {
 # Android caller serializes it with Start. Existing/ambiguous controller files
 # block tests conservatively; diagnosis itself never deletes stale evidence.
 guard_test_mode() {
+    guard_operation_acquire || { printf 'CAPABILITY_MISSING:OPERATION_BUSY\n'; return 0; }
+    guard_test_mode_locked "$1"
+    guard_operation_release
+}
+
+guard_test_mode_locked() {
     guard_compatibility_check || { printf '%s:%s\n' "$COMPAT_VERDICT" "$COMPAT_REASON"; return 0; }
-    if [ -e "$PID_FILE" ] || [ -d "$LOCK_DIR" ]; then
+    if [ -e "$PID_FILE" ] || [ -d "$LOCK_DIR" ] || ! guard_setup_absent; then
         printf 'CAPABILITY_MISSING:CONTROLLER_NOT_STOPPED\n'; return 0
     fi
     if [ "$TSWT" = -1 ] || [ "$APPLYING" != 0 ] || [ "$ANIMATION" != 0 ]; then
@@ -128,6 +304,7 @@ guard_test_mode() {
     fi
     if [ "$1" = test-ink ]; then compatibility_key=$PROFILE_ENTER_KEY
     else compatibility_key=$PROFILE_EXIT_KEY; fi
+    guard_qualification_matches || { printf 'CAPABILITY_MISSING:SETUP_REQUIRED\n'; return 0; }
     input keyevent "$compatibility_key" >/dev/null 2>&1 || {
         printf 'PRIVILEGE_UNAVAILABLE:NATIVE_COMMAND_DENIED\n'; return 0;
     }
@@ -344,8 +521,15 @@ guard_physical_read() {
 guard_command_gate() {
     # PROFILE_* is loaded once and remains immutable in this controller process.
     # A report from an earlier check cannot authorize this command.
-    guard_identity_matches || { guard_fail "$COMPAT_REASON"; return 1; }
+    # Preserve the node attached to the live raw monitor before discovery in
+    # the fresh binding check refreshes SWITCH_NODE.
     gate_switch_node=$SWITCH_NODE
+    guard_identity_matches || { guard_fail "$COMPAT_REASON"; return 1; }
+    if [ "$PROFILE_SCHEMA" = 2 ]; then
+        gate_controller=$(sha256sum "${CONTROLLER_SCRIPT_PATH:-$SCRIPT_PATH}" 2>/dev/null) || { guard_fail CONTROLLER_CHANGED; return 1; }
+        [ "${gate_controller%% *}" = "$PROFILE_CONTROLLER_SHA" ] || { guard_fail CONTROLLER_CHANGED; return 1; }
+        [ "${NXTPAPER_SETUP_RUNNING:-0}" = 1 ] || guard_qualification_matches || { guard_fail SETUP_REQUIRED; return 1; }
+    fi
     guard_discover || { guard_fail PHYSICAL_SWITCH_UNAVAILABLE; return 1; }
     if [ -n "$gate_switch_node" ] && [ "$gate_switch_node" != "$SWITCH_NODE" ]; then
         guard_fail PHYSICAL_SWITCH_CHANGED; return 1
@@ -439,22 +623,22 @@ guard_ensure_ink() {
     if [ "$PENDING" = RESET ]; then
         if guard_is_normal; then
             guard_acknowledge
-            guard_issue 343 ENTER
+            guard_issue "$PROFILE_ENTER_KEY" ENTER
         elif [ $((NOW - PENDING_AT)) -ge "$ACK_GRACE" ]; then
-            guard_repair 344 RESET
+            guard_repair "$PROFILE_EXIT_KEY" RESET
         fi
     elif [ "$PENDING" = ENTER ]; then
         [ $((NOW - PENDING_AT)) -ge "$ACK_GRACE" ] || return 0
-        if guard_is_normal; then guard_repair 343 ENTER
-        else guard_repair 344 RESET; fi
+        if guard_is_normal; then guard_repair "$PROFILE_ENTER_KEY" ENTER
+        else guard_repair "$PROFILE_EXIT_KEY" RESET; fi
     elif [ "$TSWT" = 0 ]; then
         # Physical OFF may have reversed the framework during pending entry.
         guard_is_normal || return 0
-        guard_issue 343 ENTER
+        guard_issue "$PROFILE_ENTER_KEY" ENTER
     else
         # Desired ON with a stable wrong mode needs a serialized OFF/ON edge.
         # Neither repair command changes the original commitment deadline.
-        guard_repair 344 RESET
+        guard_repair "$PROFILE_EXIT_KEY" RESET
     fi
 }
 
@@ -863,21 +1047,21 @@ guard_tick() {
             if [ "$PENDING" = RESTORE_ON ]; then
                 if guard_is_ink; then
                     guard_acknowledge
-                    guard_issue 344 EXIT || return 1
+                    guard_issue "$PROFILE_EXIT_KEY" EXIT || return 1
                 elif [ $((NOW - PENDING_AT)) -ge "$ACK_GRACE" ]; then
                     if [ "$TSWT" = 1 ]; then
                         guard_log "restore ON edge settled in incomplete mode; requesting OFF deadline=$DEADLINE"
                         PENDING=
-                        guard_issue 344 EXIT || return 1
-                    else guard_repair 343 RESTORE_ON || return 1; fi
+                        guard_issue "$PROFILE_EXIT_KEY" EXIT || return 1
+                    else guard_repair "$PROFILE_ENTER_KEY" RESTORE_ON || return 1; fi
                 fi
             elif [ "$PENDING" = EXIT ]; then
                 if [ $((NOW - PENDING_AT)) -ge "$ACK_GRACE" ]; then
-                    if [ "$TSWT" = 1 ]; then guard_repair 344 EXIT || return 1
-                    else guard_repair 343 RESTORE_ON || return 1; fi
+                    if [ "$TSWT" = 1 ]; then guard_repair "$PROFILE_EXIT_KEY" EXIT || return 1
+                    else guard_repair "$PROFILE_ENTER_KEY" RESTORE_ON || return 1; fi
                 fi
-            elif [ "$TSWT" = 1 ]; then guard_issue 344 EXIT || return 1
-            else guard_repair 343 RESTORE_ON || return 1; fi
+            elif [ "$TSWT" = 1 ]; then guard_issue "$PROFILE_EXIT_KEY" EXIT || return 1
+            else guard_repair "$PROFILE_ENTER_KEY" RESTORE_ON || return 1; fi
         fi
     fi
 }
@@ -898,13 +1082,19 @@ guard_discover() {
     ') || return 1
     awk '
       { sub(/#.*/,"") }
-      $1=="key" && ($2=="592" || $2=="593") { count[$2]++; map[$2]=$3 }
-      END { if (count[592]!=1 || count[593]!=1 || map[592]!="TSWT_ON" || map[593]!="TSWT_OFF") exit 1 }
+      $1=="key" && ($2=="592" || $2=="593") { count[$2]++; map[$2]=$3; if(NF!=3) bad=1 }
+      $1=="key" { for(i=3;i<=NF;i++) if($i=="TSWT_ON" || $i=="TSWT_OFF") symbolic[$i]++ }
+      END { if (bad || count[592]!=1 || count[593]!=1 || map[592]!="TSWT_ON" || map[593]!="TSWT_OFF" || symbolic["TSWT_ON"]!=1 || symbolic["TSWT_OFF"]!=1) exit 1 }
     ' "$KEYLAYOUT_PATH" || return 1
 }
 
 guard_validate() {
     guard_identity_matches || { guard_fail "$COMPAT_REASON"; return 1; }
+    guard_qualification_matches || { guard_fail SETUP_REQUIRED; return 1; }
+    if [ "$PROFILE_SCHEMA" = 2 ]; then
+        validation_controller=$(sha256sum "$SCRIPT_PATH" 2>/dev/null) || { guard_fail CONTROLLER_CHANGED; return 1; }
+        [ "${validation_controller%% *}" = "$PROFILE_CONTROLLER_SHA" ] || { guard_fail CONTROLLER_CHANGED; return 1; }
+    fi
     validation_reads=0
     while :; do
         if guard_native_read; then break; else native_result=$?; fi
@@ -1188,6 +1378,7 @@ guard_main() {
     # These branches intentionally precede every stateful daemon operation.
     case "${1:-start}" in
       check-compatibility) guard_compatibility_report; return 0 ;;
+      reset-stale) guard_reset_stale; return ;;
       test-ink|test-normal) guard_test_mode "$1"; return 0 ;;
     esac
     guard_clock || { printf 'ERROR:0:0:0:0:UNKNOWN:CLOCK_UNAVAILABLE:300:0:0\n'; return 1; }
@@ -1203,20 +1394,26 @@ guard_main() {
       start) ;;
       *) printf 'Usage: nxtpaper_guard.sh [start|status|request-stop|cancel-stop|stop|set-duration <seconds>]\n'; return 2 ;;
     esac
-    if guard_live_pid; then guard_status; return; fi
+    guard_operation_acquire || { guard_duration_error OPERATION_BUSY; return 1; }
+    if ! guard_setup_absent; then
+        guard_operation_release
+        guard_duration_error SETUP_IN_PROGRESS; return 1
+    fi
+    if guard_live_pid; then guard_operation_release; guard_status; return; fi
     if ! guard_controller_absent; then
+        guard_operation_release
         printf 'ERROR:0:0:0:0:UNKNOWN:CONTROLLER_IDENTITY_UNAVAILABLE:%s:0:0\n' "$NEXT_DURATION"
         return 1
     fi
     if ! mkdir "$LOCK_DIR" 2>/dev/null; then
         sleep 1
-        if guard_live_pid; then guard_status; return; fi
+        if guard_live_pid; then guard_operation_release; guard_status; return; fi
         guard_monitor_cleanup
         rm -f "$LOCK_DIR/input.fifo" "$PHYSICAL_FILE" "$PHYSICAL_FILE.tmp" \
             "$GETEVENT_PID_FILE" "$GETEVENT_PID_FILE.tmp" "$READER_PID_FILE" \
             "$READER_PID_FILE.tmp" "$WRITER_PID_FILE" "$WRITER_PID_FILE.tmp" "$MONITOR_ERROR_FILE"
         rmdir "$LOCK_DIR" 2>/dev/null
-        mkdir "$LOCK_DIR" 2>/dev/null || { printf 'ERROR:0:0:0:0:UNKNOWN:START_LOCK_FAILED:300:0:0\n'; return 1; }
+        mkdir "$LOCK_DIR" 2>/dev/null || { guard_operation_release; printf 'ERROR:0:0:0:0:UNKNOWN:START_LOCK_FAILED:300:0:0\n'; return 1; }
     fi
     OWN_LOCK=1
     rm -f "$DURATION_REQUEST" "$DURATION_ACK" "$STOP_REQUEST" "$STOP_ACK"
@@ -1226,11 +1423,13 @@ guard_main() {
     elif ! guard_process_identity "$$"; then ERROR_CODE=PROCESS_IDENTITY_UNAVAILABLE
     elif ! { DAEMON_STARTED=$process_started; DAEMON_BOOT=$process_boot;
         printf '%s:%s:%s\n' "$$" "$DAEMON_STARTED" "$DAEMON_BOOT" > "$PID_FILE"; }; then ERROR_CODE=PID_WRITE_FAILED
+    elif ! guard_operation_release; then ERROR_CODE=OPERATION_LOCK_FAILED
     elif ! guard_initializing; then :
     elif ! guard_validate; then :
     elif ! guard_start_monitor; then :
     fi
     if [ -n "$ERROR_CODE" ]; then
+        guard_operation_release
         guard_clear_duration || :
         PHASE=ERROR
         guard_publish
