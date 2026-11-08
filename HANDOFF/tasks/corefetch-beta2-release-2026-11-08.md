@@ -49,3 +49,22 @@ push the default branch so CoreFetch sees an already live URL. Verify the action
 and catalog. Initial remote default HEAD was 5450f34. Saved GitHub authorization
 was verified for the intended owner with push and workflow permissions. Preserve
 pre-existing local history files. No tag or publication at this checkpoint.
+
+## Publication and store result
+
+- Public GitHub prerelease `v1.0.6-beta.2` is live. The tag identifies commit
+  `445f361bad1371298af5f6a1b154345cc9528828`. The APK matched the local SHA256
+  through the direct anonymous release URL and the public GitHub asset API.
+  Both sidecars matched through the public API. The default branch manifest
+  shows the exact app name, beta.2/code 8 and the live download URL.
+- GitHub About and the existing English and Arabic catalog descriptions were
+  preserved. CoreFetch already had the founder's edited About paragraph before
+  the new release. The current store client renders the repository slug as its
+  heading even when the manifest provides a separate app name.
+- The first workflow hit a GitHub gateway timeout. Follow-up `0124bec` added
+  the checked public GitHub asset API fallback. Local mocked failures and real
+  APK identity/signer verification passed. GitHub run `42467846894` verified
+  the public beta.2 APK, then reached its 600-second CoreFetch check limit.
+  CoreFetch still returned beta.1 and its prior APK URL, even on an uncached
+  request. A future store metadata push starts the automatic check. Store
+  indexing is pending with CoreFetch.
