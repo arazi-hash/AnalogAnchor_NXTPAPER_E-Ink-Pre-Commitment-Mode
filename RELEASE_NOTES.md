@@ -1,4 +1,14 @@
-# NXTPAPER_E-Ink-Pre-Commitment-Mode 1.0.6-beta.2
+# NXTPAPER_E-Ink-Pre-Commitment-Mode 1.0.6-beta.3
+
+Version code `9`. Git tag `v1.0.6-beta.3`.
+
+The website button now opens the landing page in the language selected in the
+app, even when the browser remembers another language.
+
+Public beta.1 and beta.2 installations can update in place using the same
+permanent certificate. [Release and migration instructions](docs/RELEASE.md)
+
+## Published 1.0.6-beta.2
 
 Version code `8`. Git tag `v1.0.6-beta.2`.
 

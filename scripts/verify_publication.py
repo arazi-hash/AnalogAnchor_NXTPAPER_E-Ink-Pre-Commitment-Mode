@@ -17,8 +17,8 @@ import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "local" / "publication-tools"))
-VERSION = "1.0.6-beta.2"
-CODE = 8
+VERSION = "1.0.6-beta.3"
+CODE = 9
 PACKAGE = "com.analoganchor.nxtpaperguard"
 REPOSITORY = "https://github.com/arazi-hash/AnalogAnchor_NXTPAPER_E-Ink-Pre-Commitment-Mode"
 APK_NAME = f"E-Ink-Precommitment-Mode-{VERSION}.apk"

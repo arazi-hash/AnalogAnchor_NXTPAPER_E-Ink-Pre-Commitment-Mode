@@ -7,7 +7,6 @@ import android.content.ClipboardManager
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.res.ColorStateList
-import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
@@ -229,7 +228,9 @@ class MainActivity : AppCompatActivity() {
         }
         findViewById<Button>(R.id.btnReadSetupGuide).setOnClickListener { showSetupGuide() }
         findViewById<Button>(R.id.btnWebsite).setOnClickListener {
-            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://get-analog-anchor.com")).apply {
+            val language = if (resources.configuration.locales[0].language == "ar") "ar" else "en"
+            val website = "https://${getString(R.string.website_url)}/?lang=$language"
+            val intent = Intent(Intent.ACTION_VIEW, website.toUri()).apply {
                 addCategory(Intent.CATEGORY_BROWSABLE)
             }
             try {

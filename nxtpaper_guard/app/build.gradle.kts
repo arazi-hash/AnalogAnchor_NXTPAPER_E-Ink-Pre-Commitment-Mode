@@ -27,8 +27,8 @@ android {
         applicationId = "com.analoganchor.nxtpaperguard"
         minSdk = 26
         targetSdk = 36
-        versionCode = 8
-        versionName = "1.0.6-beta.2"
+        versionCode = 9
+        versionName = "1.0.6-beta.3"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

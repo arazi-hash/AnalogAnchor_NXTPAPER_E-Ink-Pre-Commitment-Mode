@@ -3,18 +3,18 @@
   "app_name": "NXTPAPER_E-Ink-Pre-Commitment-Mode",
   "package_name": "com.analoganchor.nxtpaperguard",
   "category": "Productivity",
-  "version_name": "1.0.6-beta.2",
-  "version_code": 8,
+  "version_name": "1.0.6-beta.3",
+  "version_code": 9,
   "min_sdk": 26,
   "target_sdk": 36,
   "short_description": "Experimental Max Ink commitments for compatible NXTPAPER phones. Setup required.",
   "detailed_description": "Just like people hunt for old Pixels for unlimited storage, NXTPAPER phones hide the ultimate digital minimalism secret. This app unlocks the hardware switch for enforced Max Ink pre-commitment and eye-strain-free focus.\n\nExperimental pre-commitment for compatible TCL NXTPAPER phones with native Max Ink. Requires Shizuku and a successful on-device compatibility setup.\n\nChoose five minutes by default, or 2, 4, 6 or 12 hours. Early moves to Normal trigger native Max Ink recovery during a commitment. Emergency Stop waits five minutes or the earlier commitment end, then confirms native Normal restoration. Setup trials have immediate cancellation.\n\nThe known reference is the NXTPAPER 70 Pro AMD9 firmware. Other phones and firmware remain experimental and are eligible only when their native slider protocol is recognized. A NXTPAPER button or installation success alone does not establish support. Push/cycle keys and display-only modes are not supported by this adapter.\n\nReboot, lost Shizuku access or controller loss ends enforcement; active commitments are not recovered across those losses. System updates may require setup again. Operation is local. Reports are shared only when you choose to preview and share them.\n\nPrivacy and permissions: https://github.com/arazi-hash/AnalogAnchor_NXTPAPER_E-Ink-Pre-Commitment-Mode/blob/codex/nxtpaper-demo/PRIVACY.md",
   "developer_message": "Experimental beta. Tested on the TCL NXTPAPER 70 Pro AMD9. Complete guided setup on your phone before relying on commitments.",
-  "icon_url": "https://raw.githubusercontent.com/arazi-hash/AnalogAnchor_NXTPAPER_E-Ink-Pre-Commitment-Mode/v1.0.6-beta.2/nxtpaper_guard/app/src/main/res/drawable-nodpi/launcher_art.png",
-  "banner_url": "https://raw.githubusercontent.com/arazi-hash/AnalogAnchor_NXTPAPER_E-Ink-Pre-Commitment-Mode/v1.0.6-beta.2/nxtpaper_guard/branding/launcher-source.png",
+  "icon_url": "https://raw.githubusercontent.com/arazi-hash/AnalogAnchor_NXTPAPER_E-Ink-Pre-Commitment-Mode/v1.0.6-beta.3/nxtpaper_guard/app/src/main/res/drawable-nodpi/launcher_art.png",
+  "banner_url": "https://raw.githubusercontent.com/arazi-hash/AnalogAnchor_NXTPAPER_E-Ink-Pre-Commitment-Mode/v1.0.6-beta.3/nxtpaper_guard/branding/launcher-source.png",
   "app_website": "https://get-analog-anchor.com",
   "repo_url": "https://github.com/arazi-hash/AnalogAnchor_NXTPAPER_E-Ink-Pre-Commitment-Mode",
-  "download_url": "https://github.com/arazi-hash/AnalogAnchor_NXTPAPER_E-Ink-Pre-Commitment-Mode/releases/download/v1.0.6-beta.2/E-Ink-Precommitment-Mode-1.0.6-beta.2.apk",
+  "download_url": "https://github.com/arazi-hash/AnalogAnchor_NXTPAPER_E-Ink-Pre-Commitment-Mode/releases/download/v1.0.6-beta.3/E-Ink-Precommitment-Mode-1.0.6-beta.3.apk",
   "requires_shizuku": true,
   "open_source": true,
   "license": "Apache-2.0",
@@ -41,9 +41,9 @@
     }
   },
   "screenshots": [
-    "https://raw.githubusercontent.com/arazi-hash/AnalogAnchor_NXTPAPER_E-Ink-Pre-Commitment-Mode/v1.0.6-beta.2/fastlane/metadata/android/en-US/images/phoneScreenshots/01-main.png",
-    "https://raw.githubusercontent.com/arazi-hash/AnalogAnchor_NXTPAPER_E-Ink-Pre-Commitment-Mode/v1.0.6-beta.2/fastlane/metadata/android/en-US/images/phoneScreenshots/02-setup-guide.png",
-    "https://raw.githubusercontent.com/arazi-hash/AnalogAnchor_NXTPAPER_E-Ink-Pre-Commitment-Mode/v1.0.6-beta.2/fastlane/metadata/android/ar/images/phoneScreenshots/01-main.png",
-    "https://raw.githubusercontent.com/arazi-hash/AnalogAnchor_NXTPAPER_E-Ink-Pre-Commitment-Mode/v1.0.6-beta.2/fastlane/metadata/android/ar/images/phoneScreenshots/02-setup-guide.png"
+    "https://raw.githubusercontent.com/arazi-hash/AnalogAnchor_NXTPAPER_E-Ink-Pre-Commitment-Mode/v1.0.6-beta.3/fastlane/metadata/android/en-US/images/phoneScreenshots/01-main.png",
+    "https://raw.githubusercontent.com/arazi-hash/AnalogAnchor_NXTPAPER_E-Ink-Pre-Commitment-Mode/v1.0.6-beta.3/fastlane/metadata/android/en-US/images/phoneScreenshots/02-setup-guide.png",
+    "https://raw.githubusercontent.com/arazi-hash/AnalogAnchor_NXTPAPER_E-Ink-Pre-Commitment-Mode/v1.0.6-beta.3/fastlane/metadata/android/ar/images/phoneScreenshots/01-main.png",
+    "https://raw.githubusercontent.com/arazi-hash/AnalogAnchor_NXTPAPER_E-Ink-Pre-Commitment-Mode/v1.0.6-beta.3/fastlane/metadata/android/ar/images/phoneScreenshots/02-setup-guide.png"
   ]
 }

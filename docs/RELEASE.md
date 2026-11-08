@@ -1,15 +1,15 @@
 # NXTPAPER_E-Ink-Pre-Commitment-Mode release and signing
 
-The release target is `1.0.6-beta.2`, version code `8`, at Git tag
-`v1.0.6-beta.2`. Consult [FINDINGS.md](../FINDINGS.md) for recorded handset checks
+The release target is `1.0.6-beta.3`, version code `9`, at Git tag
+`v1.0.6-beta.3`. Consult [FINDINGS.md](../FINDINGS.md) for recorded handset checks
 and [the handoff](../HANDOFF/LATEST.md) for publication status.
 
 The 7 November beta.1 phone trials used a private acceptance copy signed with the
 installation's existing identity. Its APK contents matched the published
 `1.0.6-beta.1` / code `7` apart from signing metadata.
-The public beta.1 and beta.2 APKs use the same package and permanent public
-certificate. The higher beta.2 version code supports an in-place update from the
-published beta.1. Migration from private or development copies is documented below.
+The public beta.1, beta.2 and beta.3 APKs use the same package and permanent public
+certificate. Beta.3 supports an in-place update from either earlier public beta.
+Migration from private or development copies is documented below.
 
 ## Build on either PC
 
@@ -52,7 +52,7 @@ python scripts/verify_publication.py --schema logs/shizu-store-schema-2026-11-07
 
 Obtain the schema on another PC from
 https://raw.githubusercontent.com/elhizazi1/shizu-store-docs/main/schema.json .
-Verify the beta.2 public APK against the permanent public certificate. The
+Verify the beta.3 public APK against the permanent public certificate. The
 verifier reports the schema and APK hashes. Add `--require-screenshots` once the
 reviewed captures are ready.
 
@@ -60,9 +60,8 @@ reviewed captures are ready.
 python scripts/verify_publication.py --schema logs/shizu-store-schema-2026-11-07.json --apk PATH --certificate 434a6ec4f84e1720f8f05e826fe2ccc0d148c47df73e561eac02d1b6f0845202
 ```
 
-Before publishing, confirm that the metadata refers to the accepted beta.2 tag and
-APK URL, capture actual English/Arabic screens, and run the final publication
-checks against that metadata and artifact.
+Before publishing, confirm that the metadata refers to the beta.3 tag and APK URL
+and run the final publication checks against that metadata and artifact.
 
 ## Existing development installation migration
 
@@ -88,6 +87,11 @@ it does not claim the permanent public signer was installed on the founder's pho
 Never attach this private acceptance copy to a public release.
 
 ## Physical acceptance gate
+
+For beta.3, the website destination follows the current app language. Verify
+both website locales. The native controller and compatibility data match beta.2
+byte-for-byte, so the native handset evidence below continues to describe that
+controller. Record any direct beta.3 handset tap separately.
 
 For beta.2, verify the English and Arabic setup explanations, enlarged text,
 report preview with Shizuku unavailable or permission denied, successful-test
@@ -122,10 +126,9 @@ in local regressions and qualify real future firmware only when available.
 `shizu_store.json` uses the upstream singular `category` and exact versioned APK
 URL. Its English/Arabic text states experimental support and Shizuku/setup
 requirements. Fastlane uses `NXTPAPER E-Ink Pre-Commitment` to fit its 30-character
-title limit. Screenshots must come from the accepted beta, have a privacy review,
-and be committed under Fastlane image folders. Old private captures are neither
-public URLs nor proof of the new setup UI. Metadata screenshots are added only
-after real beta captures exist; no fabricated screenshots are used.
+title limit. Use privacy-reviewed handset captures in the Fastlane image folders.
+Beta.3 reuses the accepted beta.2 captures at the new tag because the website
+destination is the only UI behavior change and the screens are identical.
 
 Keep PRIVACY.md, LICENSE, NOTICE and THIRD_PARTY_NOTICES.md current. The app does
 not send diagnostics automatically. A user can preview and explicitly share a
@@ -136,10 +139,10 @@ redacted report. Do not add unsupported privacy fields to Shizu metadata.
 The existing repository is
 https://github.com/arazi-hash/AnalogAnchor_NXTPAPER_E-Ink-Pre-Commitment-Mode .
 Do not create a duplicate. Source/release notes must identify the exact reviewed
-commit. After physical acceptance and final verification, publish a genuine
-GitHub prerelease at `v1.0.6-beta.2`. Attach only:
+commit. After verifying the changed behavior and the signed artifact, publish a
+GitHub prerelease at `v1.0.6-beta.3`. Attach only:
 
-- `E-Ink-Precommitment-Mode-1.0.6-beta.2.apk`
+- `E-Ink-Precommitment-Mode-1.0.6-beta.3.apk`
 - Its SHA256 sidecar and release notes/public signing fingerprint.
 
 Do not attach the private recovery kit, development APKs, signing material, raw
