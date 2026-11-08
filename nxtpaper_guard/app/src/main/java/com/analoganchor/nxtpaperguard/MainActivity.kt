@@ -2,6 +2,8 @@ package com.analoganchor.nxtpaperguard
 
 import android.Manifest
 import android.content.ActivityNotFoundException
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.res.ColorStateList
@@ -21,6 +23,7 @@ import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.content.ContextCompat
+import androidx.core.net.toUri
 import androidx.core.os.LocaleListCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
@@ -512,14 +515,19 @@ class MainActivity : AppCompatActivity() {
             setText(if (trialNeedsAttention) R.string.setup_summary_testing else if (setupDetailsExpanded) R.string.setup_hide_details else R.string.setup_show_details)
             isEnabled = !trialNeedsAttention
         }
-        findViewById<TextView>(R.id.tvSetupStatus).text = snapshot.error ?: getString(when {
-            !authorized -> R.string.setup_connect
+        findViewById<TextView>(R.id.tvSetupStatus).text = getString(when {
+            !authorized -> SetupGuidance.reasonResource(if (reportAccess() == CompatibilityReport.Access.PERMISSION_REQUIRED)
+                "SHIZUKU_PERMISSION_REQUIRED" else "SHIZUKU_NOT_RUNNING")
             lastResult.phase == "UPDATE_REQUIRED" -> R.string.setup_busy
-            snapshot.qualified -> R.string.setup_complete
             snapshot.controllerPresent -> R.string.setup_busy
+            snapshot.errorReason != null -> SetupGuidance.reasonResource(snapshot.errorReason)
+            phase in setOf("FAILED", "UNKNOWN", "ABORTED") -> SetupGuidance.reasonResource(snapshot.trial.reason.ifEmpty {
+                if (phase == "ABORTED") "CANCELLED" else "SETUP_INCOMPLETE"
+            })
+            snapshot.qualified -> R.string.setup_complete
             snapshot.assessment?.level == SupportAssessment.Level.MAINTAINER_TESTED -> R.string.setup_tested
             snapshot.assessment?.level == SupportAssessment.Level.EXPERIMENTAL_ELIGIBLE -> R.string.setup_experimental
-            snapshot.assessment != null -> R.string.setup_unsupported
+            snapshot.assessment != null -> SetupGuidance.reasonResource(snapshot.assessment.reason)
             else -> R.string.setup_required
         })
         findViewById<TextView>(R.id.tvSetupInstructions).setText(when (phase) {
@@ -554,7 +562,7 @@ class MainActivity : AppCompatActivity() {
             visibility = if (snapshot.trial.active || phase == "PASSED") View.VISIBLE else View.GONE
             isEnabled = authorized && !setupCommands.cancelling && phase != "ABORTING"
         }
-        findViewById<Button>(R.id.btnCompatibilityReport).isEnabled = snapshot.assessment != null
+        findViewById<Button>(R.id.btnCompatibilityReport).isEnabled = true
         findViewById<Button>(R.id.btnRecoverAfterRestart).apply {
             visibility = if ((snapshot.controllerPresent && !isGuardActive()) || lastResult.phase == "UPDATE_REQUIRED") View.VISIBLE else View.GONE
             isEnabled = authorized && !ownerBusy && (!actionInFlight || currentAction == GuardRuntime.Action.STATUS)
@@ -614,35 +622,90 @@ class MainActivity : AppCompatActivity() {
             }
     }
 
-    private fun showReport() {
-        val report = setupSnapshot.assessment?.report(BuildConfig.VERSION_NAME, setupSnapshot.trial.phase + ":" + setupSnapshot.trial.reason,
-            setupSnapshot.qualified) ?: return
-        AlertDialog.Builder(this).setTitle(R.string.setup_report).setMessage(report)
-            .setPositiveButton(R.string.setup_share) { _, _ ->
-                val send = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, report)
+    private fun showReport(assessment: SupportAssessment? = setupSnapshot.assessment,
+                           assessmentObservedAt: Long? = setupSnapshot.assessmentObservedAt,
+                           observationError: String? = setupSnapshot.errorReason) {
+        val snapshot = setupSnapshot
+        val now = SystemClock.elapsedRealtime()
+        val report = CompatibilityReport(
+            appVersion = BuildConfig.VERSION_NAME, appVersionCode = BuildConfig.VERSION_CODE,
+            deviceFacts = mapOf("model" to Build.MODEL, "device" to Build.DEVICE,
+                "android" to Build.VERSION.RELEASE, "sdk" to Build.VERSION.SDK_INT.toString(),
+                "fingerprint" to Build.FINGERPRINT, "build_display" to Build.DISPLAY,
+                "security_patch" to Build.VERSION.SECURITY_PATCH),
+            access = reportAccess(), assessment = assessment,
+            trial = snapshot.trial.takeIf { snapshot.observedAt != null }, qualified = snapshot.qualified,
+            controllerPresent = snapshot.controllerPresent.takeIf { snapshot.observedAt != null && snapshot.error == null },
+            assessmentAgeSeconds = assessmentObservedAt?.let { (now - it).coerceAtLeast(0) / 1000 },
+            setupAgeSeconds = snapshot.observedAt?.let { (now - it).coerceAtLeast(0) / 1000 },
+            observationError = observationError
+        ).render()
+        val content = layoutInflater.inflate(R.layout.dialog_compatibility_report, null)
+        content.findViewById<TextView>(R.id.tvReportContent).text = report
+        content.findViewById<Button>(R.id.btnCopyReport).setOnClickListener {
+            val copied = runCatching {
+                getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText(getString(R.string.setup_report), report))
+            }.isSuccess
+            Toast.makeText(this, if (copied) R.string.report_copied else R.string.report_copy_failed, Toast.LENGTH_SHORT).show()
+        }
+        content.findViewById<Button>(R.id.btnShareReport).setOnClickListener {
+            try {
+                val send = Intent(Intent.ACTION_SEND).setType("text/plain")
+                    .putExtra(Intent.EXTRA_TEXT, report).putExtra(Intent.EXTRA_SUBJECT, getString(R.string.setup_report))
                 startActivity(Intent.createChooser(send, getString(R.string.setup_share)))
-            }.setNegativeButton(R.string.btn_close, null).show()
+            } catch (_: ActivityNotFoundException) {
+                Toast.makeText(this, R.string.report_no_share, Toast.LENGTH_LONG).show()
+            } catch (_: SecurityException) {
+                Toast.makeText(this, R.string.report_no_share, Toast.LENGTH_LONG).show()
+            }
+        }
+        content.findViewById<Button>(R.id.btnOpenReportForm).setOnClickListener {
+            try {
+                startActivity(Intent(Intent.ACTION_VIEW, CompatibilityReport.ISSUE_FORM_URL.toUri()))
+            } catch (_: ActivityNotFoundException) {
+                Toast.makeText(this, R.string.report_no_browser, Toast.LENGTH_LONG).show()
+            } catch (_: SecurityException) {
+                Toast.makeText(this, R.string.report_no_browser, Toast.LENGTH_LONG).show()
+            }
+        }
+        AlertDialog.Builder(this).setTitle(R.string.setup_report).setView(content)
+            .setNegativeButton(R.string.btn_close, null).show()
     }
+
+    private fun reportAccess(): CompatibilityReport.Access = try {
+        when {
+            !Shizuku.pingBinder() -> CompatibilityReport.Access.NOT_RUNNING
+            Shizuku.checkSelfPermission() != PackageManager.PERMISSION_GRANTED -> CompatibilityReport.Access.PERMISSION_REQUIRED
+            else -> CompatibilityReport.Access.AUTHORIZED
+        }
+    } catch (_: Exception) { CompatibilityReport.Access.NOT_RUNNING }
 
     private fun showCompatibility() {
         if (diagnosisInFlight) return
         diagnosisInFlight = true
         refreshConnectionAndHardware()
-        GuardRuntime.diagnoseAsync(this) { report ->
+        GuardRuntime.diagnoseAsync(this) { report, assessment, assessmentObservedAt ->
             if (isFinishing || isDestroyed) return@diagnoseAsync
             diagnosisInFlight = false
             refreshConnectionAndHardware()
-            val message = getString(when (report.verdict) {
-                GuardCompatibility.Verdict.VERIFIED -> R.string.compatibility_verified
-                GuardCompatibility.Verdict.UNVERIFIED_BUILD -> R.string.compatibility_unverified
-                GuardCompatibility.Verdict.PRIVILEGE_UNAVAILABLE -> R.string.compatibility_privilege
-                GuardCompatibility.Verdict.CAPABILITY_MISSING -> if (report.reason == "NATIVE_PRESET_MISMATCH") {
-                    R.string.error_preset
-                } else R.string.compatibility_missing
-            }) + if (report.controllerUpdateRequired) "\n\n" + getString(R.string.compatibility_controller_update) else ""
+            val message = getString(when {
+                report.controllerUpdateRequired -> R.string.setup_busy
+                report.verdict == GuardCompatibility.Verdict.VERIFIED -> R.string.compatibility_verified
+                report.verdict == GuardCompatibility.Verdict.PRIVILEGE_UNAVAILABLE -> SetupGuidance.reasonResource(
+                    if (reportAccess() == CompatibilityReport.Access.PERMISSION_REQUIRED) "SHIZUKU_PERMISSION_REQUIRED" else "SHIZUKU_NOT_RUNNING")
+                else -> SetupGuidance.reasonResource(report.reason)
+            })
             AlertDialog.Builder(this)
                 .setTitle(R.string.compatibility_title)
                 .setMessage(message)
+                .setNeutralButton(R.string.setup_report) { _, _ ->
+                    val error = when {
+                        report.controllerUpdateRequired -> "LIVE_CONTROLLER_PRESENT"
+                        report.verdict != GuardCompatibility.Verdict.VERIFIED -> report.reason
+                        else -> null
+                    }
+                    showReport(assessment, assessmentObservedAt, error)
+                }
                 .setPositiveButton(R.string.btn_close, null)
                 .show()
         }

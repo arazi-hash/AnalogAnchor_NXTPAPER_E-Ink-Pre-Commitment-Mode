@@ -1,0 +1,6 @@
+Local beta.2 candidate. Handset acceptance is pending.
+Clearer setup explanations in English and Arabic.
+Preview a basic report even without Shizuku access.
+Copy or share the report, or open the GitHub compatibility form.
+Reports identify firmware, access status and checks that could not run.
+Successful and unsuccessful reports help investigate exact phone/build support.

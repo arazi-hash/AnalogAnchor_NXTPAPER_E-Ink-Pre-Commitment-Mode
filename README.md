@@ -1,12 +1,16 @@
-# E-Ink Pre-commitment Mode
+# NXTPAPER_E-Ink-Pre-Commitment-Mode
 
 **Designed for compatible TCL NXTPAPER phones with native Max Ink; compatibility testing is required.**
 
-Version `1.0.6-beta.1` / code `7` is being prepared as an experimental public beta. The tested reference is the TCL NXTPAPER 70 Pro T807D/Frida, Android 16 AMD9 slider protocol. Other eligible phones and system builds must pass setup on that exact phone; a NXTPAPER button alone does not establish support. Push/cycle buttons need a separate reviewed adapter. See [compatibility and evidence](docs/COMPATIBILITY.md).
+Release target `1.0.6-beta.2` / code `8` adds clearer setup explanations and easier
+compatibility reporting. The tested reference is the TCL NXTPAPER 70 Pro
+T807D/Frida on Android 16 AMD9. Other eligible phones and system builds must pass
+setup on the exact handset. Push/cycle buttons need a separate reviewed adapter.
+See [compatibility](docs/COMPATIBILITY.md) and [handset evidence](FINDINGS.md).
 
 ## App setup
 
-1. Install the [GitHub beta](https://github.com/arazi-hash/AnalogAnchor_NXTPAPER_E-Ink-Pre-Commitment-Mode/releases/tag/v1.0.6-beta.1), start official Shizuku, and grant access to this app.
+1. Install the [GitHub beta](https://github.com/arazi-hash/AnalogAnchor_NXTPAPER_E-Ink-Pre-Commitment-Mode/releases/tag/v1.0.6-beta.2), start official Shizuku, and grant access to this app.
 2. Open the **Phone setup** controls. Read the experimental status and native recovery instructions. Checks inspect the phone before sending any mode commands. An existing live or uncertain controller must be resolved safely before setup can run.
 3. Follow the genuine physical Normal → Max Ink → Normal test. Confirm that TCL's full native reading environment and selected-app restrictions appeared.
 4. Follow the bounded software entry, re-entry and restoration test. It runs independently of the activity, so the native launcher hiding the app does not erase progress. **Cancel test** immediately attempts restoration; it never starts a commitment or a five-minute Stop wait.
@@ -14,7 +18,7 @@ Version `1.0.6-beta.1` / code `7` is being prepared as an experimental public be
 
 Five minutes remains the default commitment; optional durations are 2, 4, 6 or 12 hours. Physical early exit during a commitment triggers native Max Ink recovery without renewing the deadline. Emergency Stop waits five minutes or the earlier commitment deadline; **Continue commitment** cancels the exit request without extending the session. Ordinary expiry permits extended reading until you move the switch to Normal.
 
-On 7 November 2026, the founder's AMD9 phone passed the guided native trial,
+On 7 November 2026, the founder's AMD9 phone running `1.0.6-beta.1` passed the guided native trial,
 physical early-exit recovery, ordinary five-minute expiry, actual delayed Stop /
 Continue controller transactions and brief sleep/wake checks. Those trials used
 a non-debuggable release acceptance copy signed for the existing installation;
@@ -36,6 +40,20 @@ For manual recovery, use TCL's physical switch: move to Ink, then back to Normal
 
 Preview a compatibility report before choosing to share it. Reports omit serials, selected app names, unrelated settings and process tokens. The app does not request INTERNET permission or upload reports in the background. See [privacy and permissions](PRIVACY.md).
 
+## Report a setup result
+
+In `1.0.6-beta.2`, open **Phone setup → Show → Preview compatibility
+report**. A basic report is available even when Shizuku cannot connect. Review it,
+choose **Copy report**, then **Open GitHub report form**. Paste the report, select
+your result and submit the form yourself. Successful tests are useful too. **Share**
+opens Android's share menu for another destination.
+
+Owners using beta.1 can use its **Share this report** action and open
+the [GitHub compatibility form](https://github.com/arazi-hash/AnalogAnchor_NXTPAPER_E-Ink-Pre-Commitment-Mode/issues/new?template=compatibility.yml)
+directly. Include the exact phone/build and leave uncertain details as unknown.
+The [compatibility guide](docs/COMPATIBILITY.md) includes troubleshooting guidance
+and a short prompt for asking an AI assistant to interpret your reviewed report.
+
 ## Build and release
 
 Use JDK 17, Android SDK platform36/build-tools36.0.0 and each PC's ignored `nxtpaper_guard/local.properties`. From `nxtpaper_guard`:
@@ -46,7 +64,12 @@ Use JDK 17, Android SDK platform36/build-tools36.0.0 and each PC's ignored `nxtp
 
 From the repository root, run `python -m unittest -q`. Shell regressions need Git for Windows `sh.exe` and use fake Android commands; they do not operate the phone. [FINDINGS.md](FINDINGS.md) distinguishes historical results from current beta checks.
 
-Public release signing uses a permanent private key outside Git; release builds fail if it is unavailable. Existing debug installations require a separately coordinated migration, because the public certificate is different. Do not uninstall, clear settings or replace a live controller automatically. See [release/signing and acceptance gates](docs/RELEASE.md), [release notes](RELEASE_NOTES.md) and [current implementation handoff](HANDOFF/tasks/public-beta-2026-11-05.md).
+The public beta.1 and beta.2 APKs share a signing certificate and support an
+in-place update. Older development and private acceptance copies use a different
+certificate and need a coordinated migration that protects existing app data.
+Release builds require the permanent private key, which is stored outside Git.
+See [release/signing and acceptance gates](docs/RELEASE.md), [release notes](RELEASE_NOTES.md)
+and [tester-experience handoff](HANDOFF/tasks/tester-experience-2026-11-07.md).
 
 The existing [GitHub repository](https://github.com/arazi-hash/AnalogAnchor_NXTPAPER_E-Ink-Pre-Commitment-Mode) is the release source. GitHub prerelease and ShizuCoreFetch are the first intended channels; metadata alone does not mean the app is listed. IzzyOnDroid eligibility is separate because of its current AI-code policy. Source is [Apache-2.0](LICENSE); dependencies retain their [own notices](THIRD_PARTY_NOTICES.md).
 

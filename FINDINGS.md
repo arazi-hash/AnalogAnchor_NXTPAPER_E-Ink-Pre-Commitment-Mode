@@ -1,5 +1,40 @@
 # Verified NXTPAPER controls
 
+## Beta.2 handset checks — 8 November 2026
+
+The 70 Pro T807D / Frida on Android 16 AMD9 completed a fresh guided test on a
+private `1.0.6-beta.2` / code `8` acceptance copy. Android had rejected the
+public-signed APK because the phone retained a package record for the earlier
+private signer. The acceptance copy installed in the owner profile with the
+historical signer and preserved the retained clone-profile data. The two public
+beta builds use the same permanent certificate.
+
+- The owner removed the magnetic holder and completed physical Normal → Max Ink
+  → Normal. The owner confirmed the native reading screen and app restrictions.
+- Software restored Normal with the switch still in Ink. After the owner moved
+  the switch to Normal, software entry and restoration succeeded. The owner
+  confirmed Normal was usable. Setup reached `QUALIFIED`, with the guard `STOPPED`.
+- English and Arabic reports showed the qualified result. The Android share
+  chooser and GitHub issue-template screen opened on request. Arabic report
+  controls were visible at enlarged font size, then the original locale and font
+  size were restored.
+- Revoking only this app's Shizuku authorization left the basic report available
+  with permission required and checks marked unperformed. Restoring permission
+  returned the app to Ready.
+
+These checks cover the tester experience and guided setup on the reference phone.
+The controller, guided-test script and adapter bytes match beta.1. The full
+commitment timing trials below were recorded on beta.1. Results from other phone
+models and firmware are still unmeasured.
+
+The final public APK with the display name `NXTPAPER_E-Ink-Pre-Commitment-Mode`
+has SHA256 `a3c291cc62c7eabc9655b836d3150a0b8bb3659c695339d253a6d4fe4f465a81`.
+Its matching private copy updated the owner profile in place. Qualification
+remained Ready. The exact title and qualified report were confirmed in English
+and Arabic, and the four store captures were reviewed and stripped of system
+bars. Final Android verification passed 56 tests and release lint had zero
+errors with 19 existing warnings.
+
 ## Public beta controller acceptance — 7 November 2026, 1.0.6-beta.1 / code 7
 
 The TCL NXTPAPER 70 Pro **T807D / Frida, Android 16 AMD9** is now the physically

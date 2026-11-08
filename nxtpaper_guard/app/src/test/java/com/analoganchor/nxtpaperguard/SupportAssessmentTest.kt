@@ -123,7 +123,8 @@ class SupportAssessmentTest {
 
     @Test fun reportContainsOnlyExplicitPublicFacts() {
         val result = assess().copy(facts = assess().facts + mapOf("serial" to "secret-serial", "selected_apps" to "private.apps", "process_token" to "private-token"))
-        val report = result.report("1.0.6-beta.1", "FAILED:RESTORE_TIMEOUT", false)
+        val report = CompatibilityReport("1.0.6-beta.2", 8, emptyMap(), CompatibilityReport.Access.AUTHORIZED,
+            assessment = result, trial = SetupTrialStatus("FAILED", "RESTORE_TIMEOUT")).render()
         assertFalse(report.contains("secret-serial"))
         assertFalse(report.contains("private.apps"))
         assertFalse(report.contains("private-token"))

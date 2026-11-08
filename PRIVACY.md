@@ -16,10 +16,21 @@ enforcement; a saved enable preference does not prove a session survived.
 
 Compatibility records stay on the phone and are bound to the build and native
 controls tested. A firmware or relevant component change requires reassessment.
-Diagnostics are shared only when you choose Preview/Share. The report omits the
-device serial, raw process/boot tokens, unrelated settings and selected app names.
-It may include the model, firmware fingerprint, native component versions and
-test results. Review it before posting it publicly on GitHub.
+In the `1.0.6-beta.2` candidate, previewing a report displays it locally. **Copy
+report** places it on the system clipboard, and **Share** passes it to an app
+you choose. **Open GitHub report form** opens the existing form in your browser.
+You paste and submit the report yourself. The browser URL contains no report data.
+
+The report includes app version/code, phone model, Android version, firmware build
+and fingerprint, security patch date, Shizuku connection/authorization status and
+available compatibility/test observations. A basic report works without Shizuku.
+Unperformed checks and cached observations are labeled. Text values are bounded
+and validated before inclusion.
+
+The report omits the device serial, raw process/boot tokens, unrelated settings
+and selected app names. Review it and your chosen destination before sharing,
+especially when posting publicly on GitHub. The published `1.0.6-beta.1` offers
+report preview and Android sharing.
 
 Removing app data removes local app preferences and qualification records. Do not
 uninstall an existing development build or replace a live controller as a routine

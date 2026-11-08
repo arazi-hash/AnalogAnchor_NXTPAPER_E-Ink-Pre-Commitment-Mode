@@ -1,14 +1,17 @@
 name: NXTPAPER compatibility report
-description: Report guided setup results for a model or firmware
+description: Share a successful test, setup problem, or Shizuku access problem
 title: "[Compatibility] Model and firmware"
 labels: []
 body:
   - type: markdown
     attributes:
       value: |
-        Preview the app's report before sharing. Do not include serial numbers,
-        account details, selected app names, private keys, or raw device dumps.
-        A report does not automatically qualify every device of the same model.
+        Successful tests and unsuccessful attempts both help us investigate exact phone/build combinations.
+        In beta.2, open Phone setup → Show → Preview compatibility report → Copy report,
+        then paste it below. A basic report is available even without Shizuku access.
+        In beta.1, use the report preview and Share this report action.
+        Review before submitting. Keep serial numbers, account details, selected app names,
+        private keys and raw device dumps out of this public issue.
   - type: input
     id: app_version
     attributes:
@@ -30,13 +33,31 @@ body:
         - Not eligible or unsupported
         - Incomplete or failed
         - Could not start Shizuku
+        - Shizuku permission unavailable or denied
+        - Guided setup has not been attempted
     validations:
       required: true
   - type: textarea
     id: report
     attributes:
-      label: Redacted report from Preview / Share
+      label: Reviewed compatibility report
+      description: Paste the report from the app. If it is unavailable, describe that in the final field.
       render: text
+  - type: input
+    id: region_carrier
+    attributes:
+      label: Market or carrier, if known (optional)
+      description: For example, Europe open market or your carrier's name. Leave uncertain details blank.
+  - type: dropdown
+    id: control
+    attributes:
+      label: Physical NXTPAPER control (optional)
+      options:
+        - Unknown
+        - Slider with two resting positions
+        - Push or cycling button
+        - Software control only
+        - No NXTPAPER control
   - type: textarea
     id: native_experience
     attributes:

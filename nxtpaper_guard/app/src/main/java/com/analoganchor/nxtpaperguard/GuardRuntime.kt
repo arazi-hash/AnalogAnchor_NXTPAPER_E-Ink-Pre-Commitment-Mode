@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.util.Log
 import android.view.KeyEvent
 import rikka.shizuku.Shizuku
@@ -151,7 +152,7 @@ object GuardRuntime {
     }
 
     /** Independent read-only path: no STATUS reconciliation, preferences, language, or deployment. */
-    fun diagnoseAsync(context: Context, callback: (GuardCompatibility.Report) -> Unit) {
+    fun diagnoseAsync(context: Context, callback: (GuardCompatibility.Report, SupportAssessment?, Long?) -> Unit) {
         val app = context.applicationContext
         executor.execute {
             val report = if (!isAuthorized()) {
@@ -173,7 +174,9 @@ object GuardRuntime {
             } catch (_: Exception) {
                 GuardCompatibility.Report(GuardCompatibility.Verdict.CAPABILITY_MISSING, "PROBE_UNAVAILABLE")
             }
-            main.post { callback(report) }
+            val assessment = latestAssessment
+            val observedAt = latestAssessmentObservedAt
+            main.post { callback(report, assessment, observedAt) }
         }
     }
 
@@ -268,9 +271,11 @@ object GuardRuntime {
     enum class SetupAction { CHECK, STATUS, START, CONFIRM_NATIVE, ABORT, QUALIFY, RECOVER }
     data class SetupSnapshot(val assessment: SupportAssessment? = null,
         val trial: SetupTrialStatus = SetupTrialStatus("STOPPED"), val qualified: Boolean = false,
-        val controllerPresent: Boolean = false, val error: String? = null)
+        val controllerPresent: Boolean = false, val error: String? = null,
+        val errorReason: String? = null, val observedAt: Long? = null, val assessmentObservedAt: Long? = null)
     private const val SETUP_SCRIPT = "/data/local/tmp/nxtpaper_setup.sh"
     private var latestAssessment: SupportAssessment? = null
+    private var latestAssessmentObservedAt: Long? = null
 
     /** Shares the controller queue; all trial progress itself belongs to the independent shell process. */
     fun setupAsync(context: Context, action: SetupAction, callback: (SetupSnapshot) -> Unit) {
@@ -349,14 +354,22 @@ object GuardRuntime {
                 SetupSnapshot(assessment, trialStatus(app), qualified, occupied)
             } catch (e: GuardFailure) {
                 SetupSnapshot(latestAssessment, runCatching { trialStatus(app) }.getOrDefault(SetupTrialStatus("UNKNOWN")),
-                    error = context.getString(e.stringId))
+                    error = context.getString(e.stringId), errorReason = when (e.stringId) {
+                        R.string.error_shizuku_not_ready -> "SHIZUKU_UNAVAILABLE"
+                        R.string.setup_busy -> "LIVE_CONTROLLER_PRESENT"
+                        R.string.setup_recovery_refused -> "RECOVERY_REFUSED"
+                        else -> "SETUP_INCOMPLETE"
+                    })
             } catch (e: Exception) {
                 Log.w("GuardRuntime", "Setup observation unavailable", e)
                 val failed = SupportAssessment(SupportAssessment.Level.UNSUPPORTED, "PROBE_UNAVAILABLE", facts = latestAssessment?.facts.orEmpty())
                 latestAssessment = failed
-                SetupSnapshot(failed, SetupTrialStatus("UNKNOWN"), error = context.getString(R.string.setup_incomplete))
+                SetupSnapshot(failed, SetupTrialStatus("UNKNOWN"), error = context.getString(R.string.setup_incomplete),
+                    errorReason = "PROBE_UNAVAILABLE")
             }
-            main.post { callback(result) }
+            val observed = result.copy(observedAt = if (result.error == null) SystemClock.elapsedRealtime() else null,
+                assessmentObservedAt = latestAssessmentObservedAt)
+            main.post { callback(observed) }
         }
     }
 
@@ -432,7 +445,10 @@ object GuardRuntime {
             shell("getprop ro.product.manufacturer"), features.any { it == "feature:vendor.software.support.tcl_switch" ||
                 it.startsWith("feature:vendor.software.support.tcl_switch=") }, features.any { it == "feature:android.hardware.telephony" ||
                 it.startsWith("feature:android.hardware.telephony=") }, settings, caps, input, layout, layoutText, layoutDigest, versions, keys,
-            readableRawInput, shell("getprop sys.tct.support_ui_switch_button")), sha256(requireNotNull(asset)))
+            readableRawInput, shell("getprop sys.tct.support_ui_switch_button")), sha256(requireNotNull(asset))).also {
+                latestAssessment = it
+                latestAssessmentObservedAt = SystemClock.elapsedRealtime()
+            }
     }
 
     /** Hold the same shell mutex used by both controllers while replacing stopped files. */

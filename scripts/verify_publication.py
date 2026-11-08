@@ -17,8 +17,8 @@ import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "local" / "publication-tools"))
-VERSION = "1.0.6-beta.1"
-CODE = 7
+VERSION = "1.0.6-beta.2"
+CODE = 8
 PACKAGE = "com.analoganchor.nxtpaperguard"
 REPOSITORY = "https://github.com/arazi-hash/AnalogAnchor_NXTPAPER_E-Ink-Pre-Commitment-Mode"
 APK_NAME = f"E-Ink-Precommitment-Mode-{VERSION}.apk"
@@ -55,7 +55,7 @@ def metadata(schema_path, require_screenshots):
     require(not require_screenshots or bool(manifest.get("screenshots")), "Real beta screenshots are still required")
     for locale in ("en-US", "ar"):
         base = ROOT / "fastlane" / "metadata" / "android" / locale
-        for name in ("title.txt", "short_description.txt", "full_description.txt", "changelogs/7.txt"):
+        for name in ("title.txt", "short_description.txt", "full_description.txt", f"changelogs/{CODE}.txt"):
             require((base / name).is_file() and bool((base / name).read_text(encoding="utf-8").strip()), f"Missing Fastlane {locale}/{name}")
         require(len((base / "title.txt").read_text(encoding="utf-8").strip()) <= 30, f"Fastlane title too long: {locale}")
         require(len((base / "short_description.txt").read_text(encoding="utf-8").strip()) <= 80, f"Fastlane short description too long: {locale}")
@@ -63,13 +63,15 @@ def metadata(schema_path, require_screenshots):
         if require_screenshots:
             require(any((base / "images/phoneScreenshots").glob("*.png")), f"Real beta screenshots missing: {locale}")
     return {"schema_sha256": hashlib.sha256(schema_bytes).hexdigest(), "metadata": "passed",
+            "metadata_version": VERSION, "metadata_version_code": CODE,
             "screenshots_required": require_screenshots}
 
 
-def inspect_apk(apk, sdk, expected_certificate):
+def inspect_apk(apk, sdk, expected_certificate, version=VERSION, code=CODE):
     tools = sdk / "build-tools" / "36.0.0"
     badging = run([tools / "aapt2.exe", "dump", "badging", apk])
-    require(re.search(r"package: name='" + re.escape(PACKAGE) + r"' versionCode='7' versionName='1\.0\.6-beta\.1'", badging), "APK package/version differs")
+    require(re.search(r"package: name='" + re.escape(PACKAGE) + r"' versionCode='" + str(code) +
+                      r"' versionName='" + re.escape(version) + "'", badging), "APK package/version differs")
     require("application-debuggable" not in badging, "Public APK is debuggable")
     tree = run([tools / "aapt2.exe", "dump", "xmltree", apk, "--file", "AndroidManifest.xml"])
     for flag in ("debuggable", "testOnly"):
@@ -99,7 +101,7 @@ def inspect_apk(apk, sdk, expected_certificate):
     return {"apk": apk.name, "bytes": apk.stat().st_size,
             "sha256": hashlib.sha256(apk.read_bytes()).hexdigest(),
             "certificate_sha256": certificate, "debuggable": False, "test_only": False,
-            "package": PACKAGE, "version": VERSION, "version_code": CODE,
+            "package": PACKAGE, "version": version, "version_code": code,
             "bundled_assets": "equal", "physical_acceptance": "requires recorded handset results"}
 
 
@@ -108,6 +110,8 @@ def main():
     parser.add_argument("--schema", type=Path, required=True)
     parser.add_argument("--require-screenshots", action="store_true")
     parser.add_argument("--apk", type=Path)
+    parser.add_argument("--apk-version", default=VERSION, help="Expected local APK version; store metadata is checked separately")
+    parser.add_argument("--apk-version-code", type=int, default=CODE, help="Expected local APK version code")
     parser.add_argument("--certificate", help="Independently recorded permanent public certificate SHA256")
     parser.add_argument("--sdk", type=Path, default=Path(os.environ.get("LOCALAPPDATA", "")) / "Android/Sdk")
     args = parser.parse_args()
@@ -115,7 +119,8 @@ def main():
         report = metadata(args.schema, args.require_screenshots)
         if args.apk:
             require(bool(args.certificate), "--certificate is required for public APK verification")
-            report.update(inspect_apk(args.apk, args.sdk, args.certificate))
+            require(args.apk_version_code > 0, "APK version code must be positive")
+            report.update(inspect_apk(args.apk, args.sdk, args.certificate, args.apk_version, args.apk_version_code))
         print(json.dumps(report, ensure_ascii=False, indent=2))
     except (ValueError, OSError, zipfile.BadZipFile, KeyError) as error:
         parser.exit(1, f"Publication verification failed: {error}\n")

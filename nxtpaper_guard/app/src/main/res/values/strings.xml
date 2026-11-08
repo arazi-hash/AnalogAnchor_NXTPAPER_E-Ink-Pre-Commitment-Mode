@@ -1,6 +1,6 @@
 <resources>
-    <string name="app_name" translatable="false">E-Ink Pre-commitment Mode</string>
-    <string name="title_nxtpaper_guard" translatable="false">E-Ink Pre-commitment Mode</string>
+    <string name="app_name" translatable="false">NXTPAPER_E-Ink-Pre-Commitment-Mode</string>
+    <string name="title_nxtpaper_guard" translatable="false">@string/app_name</string>
     <string name="desc_nxtpaper_guard">Make the decision once. Give reading your attention.</string>
     <string name="language_arabic" translatable="false">العربية</string>
     <string name="language_english" translatable="false">English</string>
@@ -93,10 +93,6 @@
     <string name="compatibility_checking">Checking compatibility…</string>
     <string name="compatibility_title">System compatibility</string>
     <string name="compatibility_verified">The known firmware and access checks passed. This read-only check does not confirm physical switch operation or a complete reading session.</string>
-    <string name="compatibility_unverified">This firmware has not been qualified. Automatic protection must wait for a compatibility review. Ask your assistant to compare this phone with the saved baseline using the PC diagnostics.</string>
-    <string name="compatibility_privilege">Start Shizuku and allow this app, then check again. After a restart without Wi-Fi, use the USB startup helper on your computer. Protection cannot run without this access.</string>
-    <string name="compatibility_missing">A required phone capability could not be confirmed. Protection is unavailable. Use the phone’s native controls and ask your assistant to inspect the PC compatibility report before changing anything.</string>
-    <string name="compatibility_controller_update">A running or unidentified controller needs review before replacement. Finish or stop it using its matching version. This is separate from firmware compatibility.</string>
     <string name="error_preset">Set the NXTPAPER switch to Max Ink with immediate switching, then retry.</string>
     <string name="error_privilege">Start Shizuku using wireless debugging or USB, then allow this app.</string>
     <string name="error_tools">This phone firmware is missing a tool needed by the reading guard.</string>
@@ -143,7 +139,6 @@
     <string name="setup_later">Later</string>
     <string name="setup_popup_message">This beta uses your phone’s native Max Ink controls. Before commitments can start:\n\n1. Connect Shizuku.\n2. Check this phone.\n3. Complete the guided switch and restoration test.\n\nSetup is required for this phone and system version. Closing this guide does not complete setup.</string>
     <string name="setup_required">Complete setup before enabling commitments.</string>
-    <string name="setup_connect">Connect Shizuku and allow access, then check this phone.</string>
     <string name="setup_intro">Designed for compatible TCL NXTPAPER phones with native Max Ink. Checking is read-only. A guided physical and software test is required on this phone/build.</string>
     <string name="setup_check">Check this phone again</string>
     <string name="setup_begin">Start guided compatibility test</string>
@@ -180,4 +175,29 @@
     <string name="setup_recover">Recover after restart</string>
     <string name="setup_recover_explanation">This clears only controller records confirmed to belong to a previous phone boot. It cannot recover an old commitment. Live or uncertain controllers are preserved. After recovery, check Shizuku and complete any required setup again.</string>
     <string name="setup_recovery_refused">Recovery could not confirm that these records belong to a previous boot. The existing controller was preserved. Finish it using its original version, or check the recovery guide.</string>
+    <string name="setup_access_unavailable">Shizuku is unavailable. Open Shizuku, start it, then return here and check this phone again. You can still share a basic report.</string>
+    <string name="setup_access_permission">Shizuku is connected and needs your permission. Allow this app in Shizuku, then check this phone again.</string>
+    <string name="setup_not_checked">This phone has not been checked yet. Connect Shizuku and tap Check this phone again.</string>
+    <string name="setup_slider_unrecognized">This beta could not recognize the native NXTPAPER slider controls. Preview the report and send it for compatibility review.</string>
+    <string name="setup_push_button">This phone reports a push-button control that needs a separately reviewed adapter. Preview the report and send it for compatibility review.</string>
+    <string name="setup_input_unavailable">The app could not read the physical switch events. Check Shizuku access and try the check again. If it still fails, share the report.</string>
+    <string name="setup_layout_unavailable">The phone’s active switch mapping could not be read reliably. Check this phone again, then share the report if the result repeats.</string>
+    <string name="setup_mapping_unrecognized">This system uses a switch mapping the beta could not verify. Share the report so this exact phone and system version can be reviewed.</string>
+    <string name="setup_native_settings">The required Max Ink settings could not be verified. Check that the NXTPAPER switch is set to Max Ink with immediate switching, then check this phone again.</string>
+    <string name="setup_native_components">The required TCL system components could not be verified. Check this phone again and share the report if the result repeats.</string>
+    <string name="setup_controller_attention">An existing reading guard or unresolved test needs attention. Finish or stop it through the version that started it. If its status is unclear, share the report.</string>
+    <string name="setup_trial_timeout">The test ran out of time. Confirm Normal by moving the physical switch to Ink, then Normal. Check Shizuku and retry the guided test, following each prompt.</string>
+    <string name="setup_trial_interrupted">The test was interrupted or stopped responding. Confirm Normal using the physical switch, check Shizuku, and share the report if setup cannot continue.</string>
+    <string name="setup_switch_moved">The physical switch moved during an automatic test. Confirm Normal, then retry and keep the switch in the position requested on screen.</string>
+    <string name="setup_restore_unconfirmed">The test could not confirm Normal mode. Move the physical switch to Ink, then Normal and wait for the transition. Check Shizuku and share the report if Normal does not return.</string>
+    <string name="setup_native_command_failed">A native mode command failed. Confirm Normal by moving the physical switch to Ink, then Normal. Check Shizuku and share the report before retrying.</string>
+    <string name="setup_check_unavailable">The check could not finish reliably. Check Shizuku, try the check again, and share the report if the result repeats.</string>
+    <string name="report_copy">Copy report</string>
+    <string name="report_copied">Report copied</string>
+    <string name="report_open_github">Open GitHub report form</string>
+    <string name="report_instructions">Review the report, then choose Copy report and Open GitHub report form. Paste it into the form and submit it. Both successful and unsuccessful setup reports help. GitHub requires internet access and sign-in.</string>
+    <string name="report_no_browser">A browser could not be opened. Open the project’s GitHub Issues page in a browser and choose NXTPAPER compatibility report.</string>
+    <string name="report_no_share">Sharing could not be opened. Use Copy report and paste it into your chosen app.</string>
+    <string name="report_copy_failed">The report could not be copied. Select the report text to copy it, or use Share.</string>
+    <string name="report_app_identity_note">Basic phone details come from Android in this app. Privileged checks require Shizuku. Previously observed results are labelled as cached.</string>
 </resources>

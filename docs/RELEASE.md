@@ -1,16 +1,22 @@
-# Public beta release and signing
+# NXTPAPER_E-Ink-Pre-Commitment-Mode release and signing
 
-Target: `1.0.6-beta.1`, version code `7`, Git tag `v1.0.6-beta.1`.
-The founder connected the phone and authorized testing on 7 November 2026.
-The founder tested a private copy of the release signed with the installation's
-existing identity. Migration to the permanent public key is documented below.
+The release target is `1.0.6-beta.2`, version code `8`, at Git tag
+`v1.0.6-beta.2`. Consult [FINDINGS.md](../FINDINGS.md) for recorded handset checks
+and [the handoff](../HANDOFF/LATEST.md) for publication status.
+
+The 7 November beta.1 phone trials used a private acceptance copy signed with the
+installation's existing identity. Its APK contents matched the published
+`1.0.6-beta.1` / code `7` apart from signing metadata.
+The public beta.1 and beta.2 APKs use the same package and permanent public
+certificate. The higher beta.2 version code supports an in-place update from the
+published beta.1. Migration from private or development copies is documented below.
 
 ## Build on either PC
 
 Use JDK 17, Android SDK 36/build-tools 36.0.0 and the Gradle wrapper. Each PC keeps
 its SDK path in ignored `nxtpaper_guard/local.properties`.
 
-The new permanent public signing key is stored privately outside the repository.
+The permanent public signing key is stored privately outside the repository.
 The default private configuration is
 `~/.android/analoganchor-nxtpaper-release/signing.properties`; alternatively set
 `NXTPAPER_SIGNING_PROPERTIES` to another private properties file. Required keys:
@@ -46,17 +52,25 @@ python scripts/verify_publication.py --schema logs/shizu-store-schema-2026-11-07
 
 Obtain the schema on another PC from
 https://raw.githubusercontent.com/elhizazi1/shizu-store-docs/main/schema.json .
-For the final APK, add `--apk PATH --certificate SHA256` to the verifier; add
-`--require-screenshots` for the final publication gate. Validation reports the
-schema hash. It does not install, upload or establish physical acceptance.
+Verify the beta.2 public APK against the permanent public certificate. The
+verifier reports the schema and APK hashes. Add `--require-screenshots` once the
+reviewed captures are ready.
 
-## Existing debug installation migration
+```powershell
+python scripts/verify_publication.py --schema logs/shizu-store-schema-2026-11-07.json --apk PATH --certificate 434a6ec4f84e1720f8f05e826fe2ccc0d148c47df73e561eac02d1b6f0845202
+```
 
-The public signer is different from historical development APKs. Android will not
-perform an ordinary in-place update across these identities. Do not solve this
-with automatic uninstall, data clearing, package renaming or forced controller
-termination. Preserve the existing APK/private key and inspect actual installed
-signer and live controller first.
+Before publishing, confirm that the metadata refers to the accepted beta.2 tag and
+APK URL, capture actual English/Arabic screens, and run the final publication
+checks against that metadata and artifact.
+
+## Existing development installation migration
+
+Android requires a matching signing certificate for ordinary updates. Historical
+development APKs and private acceptance copies may show **Update incompatible**
+when installing the public release over them. An uninstall erases app-local
+data. Preserve the existing APK/private key and inspect the actual installed
+signer, all affected Android profiles and the live controller before migration.
 
 Before a later coordinated migration, finish the old commitment or use its
 supported Stop and confirm the controller is actually stopped. An IDLE snapshot
@@ -74,6 +88,14 @@ it does not claim the permanent public signer was installed on the founder's pho
 Never attach this private acceptance copy to a public release.
 
 ## Physical acceptance gate
+
+For beta.2, verify the English and Arabic setup explanations, enlarged text,
+report preview with Shizuku unavailable or permission denied, successful-test
+reporting, clipboard copy, Android sharing and the browser form handoff. Check
+that reports label cached observations and unperformed checks, and that opening
+or sharing a report leaves qualification and mode control untouched. Then verify
+Shizuku reconnection and the guided setup presentation on the actual handset.
+Record new results separately from the beta.1 evidence in FINDINGS.md.
 
 Record the public release APK SHA256 and signing fingerprint. On the founder's
 phone, use either that APK after an explicitly chosen migration or the verified
@@ -99,7 +121,8 @@ in local regressions and qualify real future firmware only when available.
 
 `shizu_store.json` uses the upstream singular `category` and exact versioned APK
 URL. Its English/Arabic text states experimental support and Shizuku/setup
-requirements. Screenshots must come from the accepted beta, have a privacy review,
+requirements. Fastlane uses `NXTPAPER E-Ink Pre-Commitment` to fit its 30-character
+title limit. Screenshots must come from the accepted beta, have a privacy review,
 and be committed under Fastlane image folders. Old private captures are neither
 public URLs nor proof of the new setup UI. Metadata screenshots are added only
 after real beta captures exist; no fabricated screenshots are used.
@@ -114,21 +137,23 @@ The existing repository is
 https://github.com/arazi-hash/AnalogAnchor_NXTPAPER_E-Ink-Pre-Commitment-Mode .
 Do not create a duplicate. Source/release notes must identify the exact reviewed
 commit. After physical acceptance and final verification, publish a genuine
-GitHub prerelease at `v1.0.6-beta.1`. Attach only:
+GitHub prerelease at `v1.0.6-beta.2`. Attach only:
 
-- `E-Ink-Precommitment-Mode-1.0.6-beta.1.apk`
+- `E-Ink-Precommitment-Mode-1.0.6-beta.2.apk`
 - Its SHA256 sidecar and release notes/public signing fingerprint.
 
 Do not attach the private recovery kit, development APKs, signing material, raw
 logs or personal screenshots. Do not use `/releases/latest/download/` for this
 beta; its URL includes the actual tag.
 
-ShizuCoreFetch reads root metadata and GitHub release assets. Confirm the real
-catalog entry's repository, package, version tag and APK URL and verify a real
-download before calling it listed. Metadata and GitHub topics do not guarantee
-indexing. If indexing is pending, report it as pending while keeping the accepted
-GitHub beta available. Do not mislabel a beta as stable or invent a metadata PR
-submission route.
+For future updates, publish the signed APK on its exact GitHub release tag, then
+push the `shizu_store.json` update to the default branch. Preserve the existing
+GitHub About description and catalog text when updating release fields.
+ShizuCoreFetch reads GitHub automatically. The **Verify CoreFetch sync** action
+runs after a default-branch listing update. It checks the public APK's package,
+name, version and permanent signer, then polls the store for up to ten minutes.
+The action records when the catalog matches and reports a timeout if indexing
+takes longer. A phone can show a cached listing until its next refresh.
 
 IzzyOnDroid is not a launch promise: its current AI-code policy conflicts with
 this project's development history. Keep that transparent. See

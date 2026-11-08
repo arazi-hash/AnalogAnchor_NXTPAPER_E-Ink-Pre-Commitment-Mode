@@ -100,23 +100,6 @@ data class SupportAssessment(
 ) {
     enum class Level { MAINTAINER_TESTED, EXPERIMENTAL_ELIGIBLE, UNSUPPORTED }
     val eligible: Boolean get() = binding != null && level in setOf(Level.MAINTAINER_TESTED, Level.EXPERIMENTAL_ELIGIBLE)
-
-    /** Only explicitly selected, validated facts can enter a user's report. */
-    fun report(appVersion: String, trialPhase: String, qualified: Boolean): String {
-        val allowedFacts = setOf("model", "device", "android", "sdk", "fingerprint", "adapter", "adapter_revision",
-            "keylayout", "keylayout_sha256", "enter_key", "exit_key", "slider_feature", "raw_input_readable",
-            "push_button_protocol", "runtime_enter_name", "runtime_exit_name", "systemui_version", "launcher_version", "manager_version")
-        return buildString {
-            appendLine("E-Ink Pre-commitment Mode $appVersion")
-            appendLine("support=${level.name}")
-            appendLine("reason=$reason")
-            appendLine("setup=$trialPhase")
-            appendLine("local_qualification=$qualified")
-            for ((key, value) in facts.toSortedMap()) if (key in allowedFacts) appendLine("$key=$value")
-            appendLine("No serials, process tokens, selected-app lists or unrelated settings are included.")
-            append("Local setup success is experimental evidence for this phone/build, not universal model support.")
-        }
-    }
 }
 
 data class SetupTrialStatus(val phase: String, val reason: String = "", val elapsed: Long = 0,
