@@ -10,7 +10,8 @@ from ssl import PEM_cert_to_DER_cert
 import subprocess
 from tempfile import TemporaryDirectory
 import time
-from urllib.parse import urlsplit
+from urllib.error import HTTPError
+from urllib.parse import quote, urlsplit
 from urllib.request import Request, urlopen
 
 
@@ -18,8 +19,11 @@ CATALOG = "https://corefetch.siwane.xyz/?action="
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def public_bytes(url, timeout, max_bytes):
-    request = Request(url, headers={"User-Agent": "AnalogAnchor-CoreFetch-sync-check", "Accept-Encoding": "gzip"})
+def public_bytes(url, timeout, max_bytes, accept=None):
+    headers = {"User-Agent": "AnalogAnchor-CoreFetch-sync-check", "Accept-Encoding": "gzip"}
+    if accept:
+        headers["Accept"] = accept
+    request = Request(url, headers=headers)
     with urlopen(request, timeout=timeout) as response:
         if response.headers.get("Content-Encoding", "").lower() == "gzip":
             with gzip.GzipFile(fileobj=response) as body:
@@ -39,11 +43,42 @@ def release_identity(manifest):
         raise ValueError("Store repo_url must identify one GitHub owner and repository")
     repo_id = repo.path[1:]
     tag = "v" + manifest["version_name"]
+    if not re.fullmatch(r"v[A-Za-z0-9_.-]+", tag):
+        raise ValueError("Store version_name must be a versioned Git tag suffix")
     apk_url = manifest["download_url"]
     prefix = f"https://github.com/{repo_id}/releases/download/{tag}/"
     if not apk_url.startswith(prefix) or not re.fullmatch(r"[A-Za-z0-9_.-]+\.apk", apk_url[len(prefix):]):
         raise ValueError("Store download_url must identify an APK under the exact versioned GitHub release")
     return repo_id, tag
+
+
+def download_public_apk(manifest):
+    apk_url = manifest["download_url"]
+    limit = 100 * 1024 * 1024
+    try:
+        return public_bytes(apk_url, timeout=20, max_bytes=limit)
+    except HTTPError as error:
+        if error.code < 500 and error.code != 429:
+            raise
+    except OSError:
+        pass
+
+    # GitHub's download route can time out even while the public asset API serves the file.
+    print("Direct APK download unavailable. Checking the same public asset through GitHub's API.", flush=True)
+    repo_id, tag = release_identity(manifest)
+    api = f"https://api.github.com/repos/{repo_id}/releases"
+    release = json.loads(public_bytes(f"{api}/tags/{quote(tag, safe='')}", timeout=15, max_bytes=1024 * 1024))
+    if release.get("draft") is not False or release.get("tag_name") != tag:
+        raise ValueError("GitHub API does not identify the expected public release")
+    matches = [asset for asset in release.get("assets", []) if asset.get("browser_download_url") == apk_url]
+    if len(matches) != 1 or matches[0].get("state") != "uploaded" or not isinstance(matches[0].get("id"), int):
+        raise ValueError("GitHub API does not identify one uploaded APK at the manifest URL")
+    asset = matches[0]
+    data = public_bytes(f"{api}/assets/{asset['id']}?download=1", timeout=25, max_bytes=limit,
+                        accept="application/octet-stream")
+    if len(data) != asset.get("size") or (asset.get("digest") and asset["digest"] != "sha256:" + sha256(data).hexdigest()):
+        raise ValueError("GitHub API asset bytes differ from the uploaded APK")
+    return data
 
 
 def verify_apk(manifest, aapt2, apksigner):
@@ -52,8 +87,7 @@ def verify_apk(manifest, aapt2, apksigner):
     certificate = PEM_cert_to_DER_cert((release / "public-signing-certificate.pem").read_text(encoding="ascii"))
     if sha256(certificate).hexdigest() != expected_certificate:
         raise ValueError("Recorded permanent signing certificate and SHA-256 fingerprint differ")
-    # The APK comes from the same anonymous URL CoreFetch installs from.
-    data = public_bytes(manifest["download_url"], timeout=30, max_bytes=100 * 1024 * 1024)
+    data = download_public_apk(manifest)
     with TemporaryDirectory() as temp:
         apk = Path(temp) / "release.apk"
         apk.write_bytes(data)
